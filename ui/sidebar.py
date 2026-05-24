@@ -8,36 +8,42 @@ def render_sidebar() -> tuple[str, int | None, bool]:
     with st.sidebar:
         st.markdown(
             f"""
-            <div class="info-card">
-                <h3>庫存調貨建議系統</h3>
-                <p style="color:#9CA3AF;font-size:0.85rem;">Intelligent Inventory Reallocation</p>
-                <p style="color:#F5A623;font-size:0.8rem;margin:0;">Version {VERSION} | Ricky Yue</p>
+            <div class="info-card" style="text-align: center;">
+                <h3 style="margin-bottom: 0.3rem;">📦 庫存調貨建議系統</h3>
+                <p style="color:#8B949E;font-size:0.85rem;margin:0;">Intelligent Inventory Reallocation</p>
+                <hr style="margin: 0.8rem 0;border-color: #30363D;">
+                <p style="color:#00D4AA;font-size:0.75rem;margin:0;">Version {VERSION} | Ricky Yue</p>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        with st.expander("核心功能", expanded=False):
-            st.markdown("""
-            - **24種調貨模式**: A/B/C/D/E/F/ND/精簡SKU
-            - **智能識別**: 自動標記ND清貨/RF過剩/重點補0
-            - **跨OM限制**: HD→HK不可, Windy只轉Windy
-            - **自動化**: 單件消除、質量檢查、統計生成
-            """)
+        st.markdown("### 🎯 核心功能")
+        st.markdown("""
+        <div style="color:#8B949E;font-size:0.9rem;">
+        - <span style="color:#00D4AA">24種調貨模式</span>: A/B/C/D/E/F/ND/精簡SKU<br>
+        - <span style="color:#7C3AED">智能識別</span>: 自動標記ND清貨/RF過剩/重點補0<br>
+        - <span style="color:#3B82F6">跨OM限制</span>: HD→HK不可, Windy只轉Windy<br>
+        - <span style="color:#10B981">自動化</span>: 單件消除、質量檢查、統計生成
+        </div>
+        """, unsafe_allow_html=True)
 
-        with st.expander("操作指引", expanded=False):
-            st.markdown("""
-            1. **上傳檔案**: Excel (.xlsx/.xls)
-            2. **選擇模式**: 從24種模式中選擇
-            3. **啟動處理**: 點擊執行按鈕
-            4. **查看結果**: KPI及詳細表格
-            5. **下載報告**: Excel格式輸出
-            """)
+        st.markdown("### 📋 操作指引")
+        st.markdown("""
+        <div style="color:#8B949E;font-size:0.9rem;">
+        1. <span style="color:#F0F6FC">上傳檔案</span>: Excel (.xlsx/.xls)<br>
+        2. <span style="color:#F0F6FC">選擇模式</span>: 從24種模式中選擇<br>
+        3. <span style="color:#F0F6FC">啟動處理</span>: 點擊執行按鈕<br>
+        4. <span style="color:#F0F6FC">查看結果</span>: KPI及詳細表格<br>
+        5. <span style="color:#F0F6FC">下載報告</span>: Excel格式輸出
+        </div>
+        """, unsafe_allow_html=True)
 
         st.markdown("---")
 
+        st.markdown("### ⚙️ 調貨模式設定")
         selected_option = st.selectbox(
-            "調貨模式",
+            "選擇模式",
             MODE_OPTIONS,
             index=0,
             help="選擇調貨模式，詳見模式說明",
@@ -70,7 +76,7 @@ def render_sidebar() -> tuple[str, int | None, bool]:
             )
             f2_hd_transfer = hd_choice == "HD可轉出(最後優先)"
 
-        with st.expander("模式說明", expanded=False):
+        with st.expander("📖 模式說明", expanded=False):
             mode_desc = _get_mode_in_description(mode_code)
             st.markdown(mode_desc)
 

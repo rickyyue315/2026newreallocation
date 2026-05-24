@@ -6,7 +6,7 @@ from excel_generator import ExcelGenerator
 
 
 def render_upload_requirements(mode_code: str):
-    st.markdown("### 上傳需求")
+    st.markdown("### 📤 上傳需求")
 
     base_cols = "Article, OM, RP Type, Site, SaSa Net Stock, Pending Received, Safety Stock, Last Month/MTD Sold Qty, MOQ"
 
@@ -27,7 +27,7 @@ def render_upload_requirements(mode_code: str):
 
 
 def render_data_preview(df: pd.DataFrame, stats: dict):
-    st.markdown("### 數據預覽")
+    st.markdown("### 📊 數據預覽")
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -49,7 +49,7 @@ def render_data_preview(df: pd.DataFrame, stats: dict):
 
 
 def render_kpi_cards(statistics: dict):
-    st.markdown("### 處理結果")
+    st.markdown("### 📈 處理結果")
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -63,7 +63,7 @@ def render_kpi_cards(statistics: dict):
 
 
 def render_results_table(recommendations: list):
-    st.markdown("### 調貨建議清單")
+    st.markdown("### 📋 調貨建議清單")
 
     if not recommendations:
         st.warning("無調貨建議")
@@ -88,7 +88,7 @@ def render_results_table(recommendations: list):
 
 
 def render_statistics(statistics: dict):
-    with st.expander("詳細統計", expanded=False):
+    with st.expander("📊 詳細統計", expanded=False):
         col1, col2 = st.columns(2)
 
         with col1:
@@ -148,7 +148,7 @@ def render_statistics(statistics: dict):
 
 
 def render_quality_report(passed: bool, errors: list):
-    with st.expander("質量檢查", expanded=not passed):
+    with st.expander("🔍 質量檢查", expanded=not passed):
         if passed:
             st.success("所有質量檢查通過!")
         else:
@@ -169,7 +169,7 @@ def render_download_button(recommendations: list, statistics: dict):
     excel_bytes = generator.generate_excel_file(recommendations, statistics)
 
     st.download_button(
-        label="下載調貨建議Excel",
+        label="⬇️ 下載調貨建議Excel",
         data=excel_bytes,
         file_name=generate_filename(),
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

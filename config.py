@@ -104,14 +104,18 @@ EXCEL_HEADER_FONT = "Arial"
 EXCEL_HEADER_SIZE = 10
 
 THEME = {
-    "bg_primary": "#0A0A0F",
-    "accent": "#F5A623",
+    "bg_primary": "#0D1117",
+    "bg_secondary": "#161B22",
+    "bg_card": "#1C2128",
+    "accent": "#00D4AA",
+    "accent_secondary": "#7C3AED",
     "success": "#10B981",
     "warning": "#F59E0B",
     "danger": "#EF4444",
     "info": "#3B82F6",
-    "text_primary": "#F9FAFB",
-    "text_secondary": "#9CA3AF",
+    "text_primary": "#F0F6FC",
+    "text_secondary": "#8B949E",
+    "border": "#30363D",
 }
 
 MODE_OPTIONS = [
