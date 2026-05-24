@@ -1,0 +1,859 @@
+================================================================================
+  庫存調貨建議系統 - 完整系統規格書 (Complete System Specification)
+  v2.15.0 | 2026-05-24 | 供新系統重構使用
+================================================================================
+目錄:
+  1.系統架構 2.數據模型 3.預處理 4.24模式定義 5.全局規則
+  6.24模式詳解(A/B/B2/B3/C/D/E/F/ND/精簡SKU系列)
+  7.匹配引擎 8.後處理 9.質量檢查 10.策略層
+  11.Excel輸出 12.統計分析 13.UI組件 14.Dependencies 15.店舖數據
+  16.Notes/Remark 17.MagicNumbers 18.CrossOM規則 19.重構建議
+================================================================================
+
+第1章: 系統概述與架構
+================================================================================
+系統名稱: 庫存調貨建議系統 (Intelligent Inventory Reallocation System)
+版本: v2.15.0 | 開發者: Ricky Yue
+技術棧: Python 3.8+, Streamlit, Pandas, NumPy, XlsxWriter
+部署: Streamlit Cloud / Zeabur
+
+目錄架構:
+  app.py                  # Streamlit 主入口
+  business_logic.py       # 核心業務邏輯 (TransferLogic class)
+  config.py               # 集中配置 (版本, Magic Numbers, 欄位定義)
+  data_processor.py       # 數據預處理 (DataProcessor class)
+  excel_generator.py      # Excel 輸出 (ExcelGenerator class)
+  models/
+    mode.py               # 模式名稱映射 (向後兼容)
+    mode_registry.py      # 模式定義註冊表 (ModeDef dataclass, 24種模式)
+  services/
+    matching_engine.py    # 核心匹配引擎
+    recommendation_factory.py  # 建議記錄構建
+    post_processing.py    # 後處理 (優化單件調貨)
+    quality_checks.py     # 質量檢查 (8項檢查)
+    statistics.py         # 統計計算
+    notes.py              # Notes 生成
+    target_utils.py       # Target 欄位解析
+    perf_timer.py         # 效能計時
+  strategies/             # 策略層 (Strategy Pattern)
+    base.py (BaseMatchStrategy) | predicates.py (is_hd_to_hk_restricted)
+    b_special.py | c2_mode.py | e1_mode.py | e2_mode.py | f_mode.py
+    nd_mode.py | simplified_sku.py
+  ui/
+    sidebar.py | display.py | tutorial.py | styles.py | mojibake.py
+  data/stores.json        # 預設店舖資料 (87間)
+  tests/                  # 測試文件
+
+關鍵設計模式:
+  - ModeDef frozen dataclass + Mode Registry
+  - Strategy Pattern: 特殊模式使用各自策略類 (B/C2/E/F/ND/SKU)
+  - Service Layer: 匹配引擎/建議構建/後處理/質量檢查獨立
+  - Template Method: sources/dests_general vs 特殊覆寫
+
+================================================================================
+第2章: 數據模型 (輸入/衍生欄位)
+================================================================================
+2.1 REQUIRED_COLUMNS (10個):
+  Article(string,12-digit) | OM(string) | RP Type("ND"|"RF")
+  Site(string, e.g.HA02) | SaSa Net Stock(int) | Pending Received(int)
+  Safety Stock(int) | Last Month Sold Qty(int) | MTD Sold Qty(int) | MOQ(int)
+
+2.2 OPTIONAL_COLUMNS:
+  Article Description | Article Long Text (60 Chars) | ALL (E模式標記,case-insensitive)
+  Target (F模式, numeric, NFKC正規化) | Type ("T"|"M"|"L", B2/E1b模式)
+  Last 2 Month Sold Qty | Product Hierarchy / Brand / 品牌
+
+2.3 衍生欄位:
+  Effective Sold Qty = Last Month Sold Qty + MTD Sold Qty
+  Total Available = SaSa Net Stock + Pending Received
+
+2.4 INTEGER_COLUMNS (強制int): SaSa Net Stock, Pending Received, Safety Stock, Last Month Sold Qty, MTD Sold Qty, MOQ
+2.5 STRING_COLUMNS (強制str.strip()): OM, RP Type, Site
+
+2.6 店舖編碼: HA*=香港島, HB*=九龍, HC*=新界, HD*=澳門
+2.7 OM列表: Ivy, Violet, Queenie, Candy, Hippo, Eva, Windy (從stores.json)
+
+
+================================================================================
+第3章: 數據預處理流程 (data_processor.py)
+================================================================================
+DataProcessor.preprocess_data(file_path_or_buffer) -> (DataFrame, stats_dict)
+
+Step 1: read_excel_file()
+  - 使用 calamine (Rust) 引擎, 回退 openpyxl
+  - Article zfill(12) + [-12:] (強制12位)
+  - ALL欄位: case-insensitive標準化, 重複欄位去重, 若無則創建空欄
+  - Target欄位: case-insensitive標準化 (column.upper() == 'TARGET')
+  - Type欄位: case-insensitive標準化 (column.upper() == 'TYPE')
+  - 商品描述: Article Description > Article Long Text (60 Chars) > "N/A"
+
+Step 2: validate_columns()
+  - 檢查所有 REQUIRED_COLUMNS 是否存在
+
+Step 3: convert_data_types()
+  - INTEGER_COLUMNS: pd.to_numeric(errors='coerce').fillna(0).astype(int)
+  - STRING_COLUMNS: fillna("").astype(str).str.strip()
+  - RP Type驗證: 僅 "ND"/"RF", 無效值修正為"RF"並記錄
+
+Step 4: fill_default_store_data()
+  - 從 data/stores.json 加載 OM/Type 預設值
+  - Site標準化大寫匹配, 僅填充空值/NaN
+  - 記錄: om_filled, type_filled, sites_not_found
+
+Step 5: handle_missing_values()
+  - Safety Stock, MOQ 缺失 -> 0
+  - Last Month Sold Qty, MTD Sold Qty 缺失 -> 0
+
+Step 6: correct_outliers()
+  - 銷量負值 -> 0
+  - 銷量 > 100,000 -> 100,000 (OUTLIER_CAP)
+  - Safety Stock/MOQ 負值 -> 0
+
+Step 7: calculate_effective_sold_qty()
+  - Effective Sold Qty = Last Month Sold Qty + MTD Sold Qty
+
+Step 8: validate_file_format()
+  - 僅 .xlsx/.xls, 限50MB (FILE_SIZE_LIMIT_BYTES)
+
+================================================================================
+第4章: 24種模式定義 (models/mode_registry.py)
+================================================================================
+ModeDef frozen dataclass 欄位:
+  code: str, name: str, description: str, attr_name: str
+  families: FrozenSet[str]  (b_special,b3_family,b_tourist_no_source,b_l_retain,d_family,nd_transfer,simplified_sku)
+  cross_om_grouping: bool   (True=按Article分組; False=按Article+OM)
+  cross_om_matching: bool   (True=允許跨OM配對)
+  source_filter: bool       (True=從dests過濾掉sources中的Site)
+  strategy_key: Optional[str] (b_special,c2_mode,e1_mode,e2_mode,f_mode,nd_mode,simplified_sku or None)
+  receive_site_limit: bool  (True=顯示接收店數限制UI)
+  extra_ui_options: FrozenSet  (e.g. f2_hd_transfer)
+  required_columns: FrozenSet  (e.g. ALL for E modes)
+  source_method: Optional[str]  (自訂轉出方法名)
+  dest_method: Optional[str]    (自訂接收方法名)
+
+24種模式表:
+|Code|Name               |Families               |CrossGrp|CrossMatch|Strategy    |RecvLimit|SrcMethod         |DestMethod      |SrcFilter|
+|A   |保守轉貨            |{}                     |No      |No        |None        |No       |None              |None            |No       |
+|B   |加強轉貨            |{}                     |No      |No        |None        |No       |None              |None            |No       |
+|B2  |附加B(特別模式)     |{b_special}            |No      |No        |b_special   |Yes      |None              |_dests_b_special|No       |
+|B2a |附加B2a(T不出貨)    |{b_special,b_tourist}  |No      |No        |b_special   |Yes      |None              |_dests_b_special|No       |
+|B2L |附加B2L(L保留2)     |{b_special,b_l_retain} |No      |No        |b_special   |Yes      |None              |_dests_b_special|No       |
+|B2La|附加B2La(L2+T不出)  |{b_special,b_tourist,b_l}|No    |No        |b_special   |Yes      |None              |_dests_b_special|No       |
+|B3  |附加B3(跨OM)        |{b_special,b3_family}  |Yes     |Yes       |b_special   |Yes      |None              |_dests_b_special|No       |
+|B3a |附加B3a(跨OM+T不出) |{b_special,b3,b_tourist}|Yes    |Yes       |b_special   |Yes      |None              |_dests_b_special|No       |
+|B3L |附加B3L(跨OM+L2)    |{b_special,b3,b_l}     |Yes     |Yes       |b_special   |Yes      |None              |_dests_b_special|No       |
+|B3La|附加B3La(跨OM+L2+T) |{b_special,b3,b_t,b_l} |Yes     |Yes       |b_special   |Yes      |None              |_dests_b_special|No       |
+|C   |重點補0             |{}                     |No      |No        |None        |No       |None              |None            |No       |
+|C1  |重點補0-只補0/1     |{}                     |No      |No        |None        |No       |None              |_dests_c1_mode  |No       |
+|C2  |附加C2(跨OM)        |{}                     |Yes     |Yes       |c2_mode     |No       |None              |None            |Yes      |
+|D   |清貨轉貨            |{d_family}             |No      |No        |None        |No       |None              |_dests_d_mode   |No       |
+|D2  |清貨轉貨(ND限定)    |{d_family}             |No      |No        |None        |No       |None              |_dests_d_mode   |No       |
+|E1  |強制轉出            |{}                     |No      |No        |e1_mode     |Yes      |_sources_e_mode   |_dests_e_mode   |Yes      |
+|E1b |強制轉出(優先類型)  |{}                     |No      |No        |e1_mode     |Yes      |_sources_e_mode   |_dests_e_mode   |Yes      |
+|E2  |強制轉出(跨OM)      |{}                     |Yes     |Yes       |e2_mode     |Yes      |_sources_e_mode   |_dests_e_mode   |Yes      |
+|F   |目標優化            |{}                     |Yes     |Yes       |f_mode      |No       |_sources_f_mode   |_dests_f_mode   |Yes      |
+|F2  |F指定模式           |{}                     |Yes     |Yes       |f_mode      |No       |_sources_f_mode   |_dests_f_mode   |Yes      |
+|ND1 |ND同OM轉貨          |{nd_transfer}          |No      |No        |nd_mode     |Yes      |_sources_nd_mode  |_dests_nd_mode  |Yes      |
+|ND2 |ND混合OM轉貨        |{nd_transfer}          |Yes     |Yes       |nd_mode     |Yes      |_sources_nd_mode  |_dests_nd_mode  |Yes      |
+|簡同|精簡SKU(限同OM)     |{simplified_sku}       |No      |No        |simplified  |No       |_sources_simplified|_dests_simplified|Yes    |
+|簡跨|精簡SKU(跨OM)       |{simplified_sku}       |No      |Yes       |simplified  |No       |_sources_simplified|_dests_simplified|Yes    |
+
+================================================================================
+第5章: 全局業務規則 (適用於所有模式)
+================================================================================
+規則1: ND店舖限制
+  ND 只能作為 SOURCE, 不能作為 DESTINATION (除非 ND1/ND2/F/F2)
+  檢查: if dest.get('rp_type') == 'ND': return False (can_transfer)
+  質量檢查項7: skip_nd_check=True時跳過 (ND轉貨/F模式)
+
+規則2: 最高動銷店保護
+  每個(Article,OM)組中，Effective Sold Qty最高的RF不作為轉出源
+  實現: _compute_max_protected_sold(df) -> max_sold or float('inf')
+  特殊: 只有1間RF, 或所有RF銷量相同, 或max為0 -> 保護不生效
+
+規則3: 禁止雙重角色 (No Dual Role)
+  同(Article,Site)不能同時在transfer_sites和receive_sites中
+  匹配時: if dest['site'] in transfer_sites: continue
+  E2 Phase 3特別強化此檢查
+  質量檢查項6驗證
+
+規則4: 不能自己轉給自己
+  if source['site'] == dest['site']: continue
+
+規則5: 匹配優先級順序 (一般模式 A/B/C/D/D2):
+  0.C only: ND(1)->重點補0(1)  [C模式在第一輪先處理重點補0]
+  1. ND(1) -> 緊急缺貨(1)
+  2. ND(1) -> 潛在缺貨(2)
+  3. RF過剩(2) -> 緊急缺貨(1)
+  4. RF過剩(2) -> 潛在缺貨(2)
+  5. RF加強(2) -> 緊急缺貨(1)
+  6. RF加強(2) -> 潛在缺貨(2)
+  7.C only: RF過剩(2)->重點補0(1) + RF加強(2)->重點補0(1)
+
+  C1模式: 僅重點補0，不回落緊急/潛在
+  0. ND(1)->緊急(1)
+  1. RF過剩(2)->重點補0(1) [按transferable_qty desc排序]
+  2. RF加強(2)->重點補0(1)
+
+  B Special模式 (B2/B2a/B2L/B2La/B3/B3a/B3L/B3La) 8回合:
+  1. ND(1)->P1 dest  2. ND(1)->P2 dest
+  3. RF過剩(2)->P1   4. RF過剩(2)->P2
+  5. Local全轉出(2)->P1  6. Local全轉出(2)->P2
+  7. RF加強(2)->P1   8. RF加強(2)->P2
+
+規則6: 後處理避免單件調貨 (全模式) -> 詳見第8章
+
+
+================================================================================
+第6章: 24模式完整邏輯詳解
+================================================================================
+----------------------------------------------------------------------
+6.1 模式A: 保守轉貨 (Conservative)
+----------------------------------------------------------------------
+分組: Article+OM | Strategy: None (match_general_mode) | SourceFilter: No
+轉出規則 _sources_general:
+  P1-ND轉出: RP=ND, Stock>0, transferable=全庫存, source_type="ND轉出"
+  P2-RF過剩轉出: RP=RF
+    前置: total_available > safety_stock AND effective_sold < max_sold_qty
+    base = total_available - safety_stock
+    cap = max(total_available * 0.2, 2)   (A_MODE_PERCENTAGE_CAP=0.2, A_MODE_MIN_TRANSFER=2)
+    actual = min(base, cap, SaSa Net Stock)
+    安全檢查: remaining = SaSa Net Stock - actual >= safety_stock
+    單件上調(v2.11.1): 若actual==1且remaining>=3且2<=cap -> actual=2 (放寬safety-1)
+    source_type="RF過剩轉出"
+接收規則 _dests_general:
+  P1-緊急缺貨: RF, Stock=0, EffSold>0, needed=Safety Stock
+  P2-潛在缺貨: RF, total_available < Safety Stock, needed=Safety Stock - total_available
+
+----------------------------------------------------------------------
+6.2 模式B: 加強轉貨 (Enhanced)
+----------------------------------------------------------------------
+分組: Article+OM | Strategy: None | SourceFilter: No
+轉出規則: ND同A; RF:
+  base = total_available - safety_stock
+  cap = max(total_available * 0.5, 2)   (B_MODE_PERCENTAGE_CAP=0.5, B_MODE_MIN_TRANSFER=2)
+  actual = min(base, cap, SaSa Net Stock)
+  remaining >= safety_stock -> "RF過剩轉出"
+  remaining < safety_stock  -> "RF加強轉出"
+  (無A模式的嚴格safety檢查，允許轉後低於safety)
+接收規則: 同A
+
+----------------------------------------------------------------------
+6.3-6.10 B2/B2a/B2L/B2La/B3/B3a/B3L/B3La 家族
+----------------------------------------------------------------------
+共同特徵: Strategy=b_special, DestMethod=_dests_b_special, ReceiveLimit=Yes
+轉出規則 (_sources_general, is_b_special_mode):
+  P1: ND全轉出
+  Special: Type=L 銷量特例 (即使RF)
+    B2/B2a/B3/B3a: max(LastMonth,MTD)<=2 -> 全轉出 ("Local店舖全轉出")
+    B2L/B2La/B3L/B3La: max(LastMonth,MTD)<=2 -> max(net_stock-2,0)保留2件
+    若Type=L且 max(LastMonth,MTD)>2: 回到B模式RF規則
+  P2: 其他RF (B模式規則, 50%cap)
+  B2a/B2La/B3a/B3La: Type=T不可作為source
+  B3/B3a/B3L/B3La: cross_om_grouping=True, cross_om_matching=True
+
+接收規則 _dests_b_special:
+  僅RF可接收, cap=max(Safety*2,3) (SAFETY_RECEIVE_MULTIPLIER=2,MIN_RECEIVE_FLOOR=3)
+  條件: total_available < safety_stock
+  排序優先級:
+    1.Type=T+sales>0:"遊客區店舖 高銷量優先" (按eff_sold desc)
+    2.Type=M+sales>0:"混合型店舖 高銷量優先" (按eff_sold desc)
+    3.Type=T+sales=0:"遊客區店舖 Safety優先" (按safety desc)
+    4.Type=M+sales=0/其他:"混合型店舖 Safety優先" (按safety desc)
+
+Mix保護規則 (在can_transfer中):
+  若source Type=M且source.sales_total > dest.sales_total: 跳過配對
+  (total = LastMonth + MTD)
+
+跨OM特殊 (B3系列): HD不能轉HA/HB/HC, Windy只轉Windy, 同OM也檢查
+
+匹配: BSpecialStrategy 8回合, RF過剩在Local全轉出之前
+
+----------------------------------------------------------------------
+6.11 模式C: 重點補0 (Priority Zero Stock)
+----------------------------------------------------------------------
+分組: Article+OM | Strategy: None | SourceFilter: No
+轉出: 同B模式但限制不同:
+  cap = max(total_available*0.3, 1), abs_cap=3
+  upper_limit = max(1, min(ratio_cap, abs_cap))
+  即: 30%上限, 最多3件, 至少1件
+
+接收: 額外 "重點補0" 類型:
+  Trigger: total_available <= 1 AND (Safety>0 or EffSold>0)
+  target_qty = max(Safety*0.5, 3)  (F_TARGET_MULTIPLIER=0.5, F_TARGET_FLOOR=3)
+  needed = target_qty - total_available
+
+重點補0累計追蹤: received_qty_by_site[receive_site_key], 達target後needed_qty=0
+
+----------------------------------------------------------------------
+6.12 模式C1: 重點補0-只補0/1
+----------------------------------------------------------------------
+分組: Article+OM | DestMethod=_dests_c1_mode | SourceFilter: No
+轉出 (與C差異):
+  前置: SaSa Net Stock > 2 (C: total_available > safety)
+  下限: at least 2 (C: at least 1)
+  actual_transferable < 2 -> 跳過
+  RF來源按 transferable_qty desc 排序
+
+接收: 僅 total_available <= 1 (重點補0), 不回落到緊急/潛在
+  target_qty = max(Safety*0.5, 3)
+
+匹配: C1特殊版本 match_general_mode:
+  0. ND(1)->緊急(1)
+  1. RF過剩(2)->重點補0(1) [source_filter='RF過剩轉出', dest_filter='重點補0']
+  2. RF加強(2)->重點補0(1) [source_filter='RF加強轉出', dest_filter='重點補0']
+
+----------------------------------------------------------------------
+6.13 模式C2: 附加C跨OM重點補0
+----------------------------------------------------------------------
+分組: 僅Article | Strategy=c2_mode | CrossOM | SourceFilter: Yes
+轉出/接收: 同C模式
+跨OM: HD->!HA/HB/HC, Windy->Windy only
+匹配: C2ModeStrategy (dest priority排序, source遍歷)
+
+----------------------------------------------------------------------
+6.14 模式D: 清貨轉貨 (Clearance)
+----------------------------------------------------------------------
+分組: Article+OM | Family=d_family | DestMethod=_dests_d_mode | SourceFilter: No
+轉出:
+  P1-ND清貨轉出: ND, LastMonth=0, MTD=0, Stock>0, 全轉出
+    有銷售ND: "ND轉出" (非清貨)
+  P2-RF過剩轉出: 同A模式 (嚴格safety)
+
+避免1件餘貨 (_adjust_d_family_remainder):
+  若 source_type='ND清貨轉出' 且 final_remaining==1:
+    transferable >= t+1 -> t+=1 (剩0)
+    else t>1 -> t-=1 (剩2)
+
+接收 (_dests_d_mode):
+  P1-緊急缺貨: 零庫存+有銷售, needed=max(Safety,2)-total_available
+  P2-潛在缺貨: total<Safety, needed=Safety-total (不要求最高銷量)
+
+----------------------------------------------------------------------
+6.15 模式D2: 清貨轉貨ND限定
+----------------------------------------------------------------------
+分組: Article+OM | Family=d_family
+轉出: 僅ND+LastMonth=0+MTD=0 (ND清貨轉出)
+  ND有銷售 -> 跳過; RF -> 完全不轉出
+  有銷售ND也不轉出 (與D不同)
+接收: 同D; 避免1件餘貨: 同D
+
+----------------------------------------------------------------------
+6.16 模式E1: 強制轉出 (僅同OM)
+----------------------------------------------------------------------
+分組: Article+OM | Strategy=e1_mode | 需ALL欄位 | SourceFilter:Yes | RecvLimit:Yes
+轉出 _sources_e_mode:
+  條件: ALL欄位有非空值, Stock>0
+  可轉出=全數, source_type="E模式強制轉出"
+  不分ND/RF
+接收 _dests_e_mode:
+  僅RF, cap=max(Safety*2,3)
+  條件: total_available < max_can_receive
+  needed = max_can_receive - total_available
+  dest_type="E模式接收"
+匹配: E1ModeStrategy, 僅同OM, is_hd_to_hk_restricted, 接收上限, 店數限制
+
+----------------------------------------------------------------------
+6.17 模式E1b: 強制轉出 (優先類型接收)
+----------------------------------------------------------------------
+轉出: 同E1
+接收排序 (_dests_e_mode, mode=E1b):
+  1.Type=T+sales>0: P1,"E1b遊客區店舖 高銷量優先"
+  2.Type=M+sales>0: P2,"E1b混合型店舖 高銷量優先"
+  3.Type=T+sales=0: P3,"E1b遊客區店舖 Safety優先"
+  4.Type=M+sales=0: P4,"E1b混合型店舖 Safety優先"
+  5.其他: P5
+  P1/P2按-eff_sold排序, P3/P4/P5按-safety排序
+
+----------------------------------------------------------------------
+6.18 模式E2: 強制轉出 (跨OM) - 3 Phase
+----------------------------------------------------------------------
+分組: 僅Article | Strategy=e2_mode | CrossOM | RecvLimit:Yes
+轉出/接收: 同E1
+Phase 1: 同OM優先 (source.om==dest.om)
+Phase 2: 跨OM回退 (source.om!=dest.om)
+  限制: is_hd_to_hk_restricted, 接收上限, 店數限制
+Phase 3: C模式回退 (關鍵!)
+  觸發: 存在未滿足dest且dest.om不在e_mode_source_oms中
+  來源: 非E模式OM的RF店舖
+    條件: total_available > safety_stock, 非最高銷量, 排除transfer/receive sites
+    限制: C模式 (30%,max3,min1)
+  配對: source->unfulfilled dests (跨OM)
+  類型: "RF過剩轉出(C模式回退)" / "RF加強轉出(C模式回退)"
+
+
+----------------------------------------------------------------------
+6.19 模式F: 目標優化 (Target Optimization)
+----------------------------------------------------------------------
+分組: 僅Article | Strategy=f_mode | CrossOM | SourceFilter:Yes | SrcMethod=_sources_f_mode | DstMethod=_dests_f_mode
+轉出 _sources_f_mode:
+  Target解析: parse_target_series (NFKC正規化, 去逗號)
+  P1-F模式ND轉出: ND, Stock>0
+    若Target>0: 跳過 (此店改為接收方)
+    F2: 若Site在target_stores集合: 跳過
+    可轉出=全數, source_type="F模式ND轉出"
+  P2-F模式RF轉出: RF
+    若Target>0: 跳過
+    F2: 若Site在target_stores: 跳過
+    保護最高銷量店
+    可轉出=全數 (不限Safety), source_type="F模式RF轉出"
+    排序: (priority, effective_sold_qty)
+接收 _dests_f_mode:
+  解析Target系列
+  P1-Target接收 (ND/RF皆可):
+    Target數值>0 -> needed=target_qty (直接使用,不減庫存/pending)
+    dest_type="F模式目標接收"(F) or "F指定模式目標接收"(F2)
+  P2-補0邏輯 (僅F,不含F2):
+    total_available<=1 AND (Safety>0 or EffSold>0) AND RP=RF
+    target_qty=max(Safety*0.5,3)
+    needed=target_qty-total_available
+    注意: P2配對僅同OM (source.om==dest.om)
+匹配 FModeStrategy:
+  按priority_level 1,2處理; P1 dests按needed_qty desc排序
+  來源排序鍵(f_mode._sort_key):
+    同OM>跨OM, ND>RF
+    F2+Windy目標: 非Windy源->Windy目標加windy_penalty=5
+    F2+HD可轉出: HD源->HA/HB/HC加hd_penalty=10
+
+----------------------------------------------------------------------
+6.20 模式F2: F指定模式 (Target-Only Optimization)
+----------------------------------------------------------------------
+與F相同，差異:
+  - 僅P1接收 (無P2補0邏輯)
+  - 預先計算全域target_stores集合 (任何Article有Target>0的Site都不做source)
+  - extra_ui_options: f2_hd_transfer (UI選項控制HD可轉出)
+  - Windy目標優先: windy_penalty=5 (非Windy源->Windy目標僅在Windy源不足時使用)
+  - HD可轉出: hd_penalty=10 (HD->HA/HB/HC僅在其他源不足時使用)
+
+----------------------------------------------------------------------
+6.21 模式ND1: ND同OM轉貨
+----------------------------------------------------------------------
+分組: Article+OM | Family=nd_transfer | Strategy=nd_mode | RecvLimit:Yes | SourceFilter:Yes
+打破ND不可接收規則!
+轉出 _sources_nd_mode:
+  僅ND可轉出
+  保護最高銷量ND (eff_sold >= max_nd_sold)
+  可轉出=全數
+  排序: 按total_sales(LastMonth+MTD)升序 (0銷優先)
+  source_type="ND智能轉出"
+接收 _dests_nd_mode:
+  P1-RF緊急缺貨: RF, Stock=0, EffSold>0, needed=Safety(至少2)
+    dest_type="RF緊急缺貨補貨"
+  P2-ND潛在缺貨: ND, total_sales>0 (0銷量ND不可接收)
+    max_receive=2*total_sales (ND_RECEIVE_MULTIPLIER=2)
+    條件: current_stock(net+pending) < max_receive
+    needed=max_receive-current_stock
+    排序: total_sales desc (高銷優先)
+    dest_type="ND潛在缺貨接收"
+匹配 NDModeStrategy: destination-first (先遍歷dest再找source)
+  接收上限max_receive_qty控制; 店數限制支援
+
+----------------------------------------------------------------------
+6.22 模式ND2: ND混合OM轉貨
+----------------------------------------------------------------------
+與ND1相同，差異: cross_om_grouping/matching=True
+  跨OM: Windy->Windy only, HD->!HA/HB/HC
+
+----------------------------------------------------------------------
+6.23 模式精簡SKU(限同OM)
+----------------------------------------------------------------------
+分組: Article+OM | Family=simplified_sku | Strategy=simplified_sku | SourceFilter:Yes
+核心: Cap = max(Safety*2, Last2Month*2)
+轉出 _sources_simplified_sku:
+  P1-精簡SKU ND轉出: ND, Stock>0, 全轉出
+  P2-精簡SKU RF轉出: RF
+    保護最高銷量
+    Cap = max(Safety*2, Last2Month*2) (SIMPLIFIED_SKU_RECEIVE_MULTIPLIER=2)
+    條件: total_available > Cap
+    transferable = min(total_available - Cap, SaSa Net Stock)
+接收 _dests_simplified_sku:
+  僅RF; Cap同上
+  條件: total_available < Cap
+  needed = Cap - total_available
+  max_receive_qty = needed
+匹配 SimplifiedSKUStrategy:
+  最少2件起轉 (source.transferable_qty >= 2)
+  跨OM限制 (限同OM僅檢查同OM)
+  退回D001: 剩餘未配對庫存 -> is_d001_return=True, dest_priority_override=99
+
+----------------------------------------------------------------------
+6.24 模式精簡SKU(跨OM)
+----------------------------------------------------------------------
+同精簡SKU(限同OM), cross_om_matching=True
+跨OM: Windy->Windy only, HD->!HA/HB/HC
+
+
+================================================================================
+第7章: 匹配引擎 - services/matching_engine.py (267 lines)
+================================================================================
+7.1 compute_transfer_qty(logic,source,dest,mode,current_received_qty) -> int
+步驟:
+  1. transfer_qty = min(source.transferable_qty, dest.needed_qty)
+  2. _clamp_target_qty: 若有target_qty且(is_b_special或dest_type=='重點補0'或is_d_family)
+     -> min(transfer_qty, target_qty - current_received)
+  3. _adjust_d_family_remainder: D模式ND清貨避免1件餘貨
+  4. 單件上調: 若transfer_qty==1且transferable>=2且source_type in (ND轉出,ND清貨,RF加強,RF過剩)
+     -> 檢查dest.needed>=2或(mode==A且RF過剩) -> transfer_qty=2
+     D模式特殊: remaining_after_opt==1且transferable>=3 -> transfer_qty=3
+  5. 再次clamp + adjust
+  6. return max(transfer_qty, 0)
+
+7.2 can_transfer(logic,source,dest,mode,article,...) -> bool
+檢查順序:
+  1. source.site == dest.site -> False (自己轉自己)
+  2. dest.site in transfer_sites -> False (接收方曾轉出)
+  3. source.site in receive_sites -> False (轉出方曾接收)
+  4. dest.rp_type == 'ND' -> False (ND不接收,除非ND轉貨/F模式)
+  5. 接收店數限制: matched_sites達上限且dest不在其中 -> False
+  6. Cross-OM檢查:
+     is_cross_om = (source.om != dest.om)
+     if is_cross_om:
+       is_hd_to_hk_restricted -> False
+       source.om=='Windy'且dest.om!='Windy' -> False
+  7. B3_family模式(同OM也檢查):
+     source.om=='Windy'且dest.om!='Windy' -> False
+     is_hd_to_hk_restricted -> False
+  8. B Special Mix保護:
+     source.store_type=='M'且source.sales>dest.sales -> False
+  9. 接收上限(target_qty存在):
+     current_received >= target_qty -> False (is_b_special/重點補0/is_d_family)
+
+7.3 match_by_priority(logic,sources,dests,recommendations,...)
+流程:
+  1. 過濾source: priority==source_priority 且 transferable_qty>0
+  2. C1模式: 按(-transferable_qty, effective_sold_qty)排序
+  3. source_type_filter過濾 (如'RF過剩轉出')
+  4. 過濾dest: priority==dest_priority 且 needed_qty>0
+  5. dest_type_filter過濾 (如'重點補0')
+  6. 雙重循環: for source: for dest:
+       can_transfer檢查 -> compute_transfer_qty -> build_recommendation + apply_transfer
+       update transfer_sites, receive_sites, source_to_receive_sites
+       _mark_dest_saturated
+
+7.4 match_general_mode(logic,sources,dests,...) -> list
+prep_temp_lists創建可變副本後，根據模式執行不同回合:
+  C模式(9回合): ND->重點補0, ND->緊急, ND->潛在, RF過剩->重點補0, RF過剩->緊急, RF過剩->潛在, RF加強->重點補0, RF加強->緊急, RF加強->潛在
+  C1模式(3回合): ND->緊急, RF過剩->重點補0, RF加強->重點補0
+  A/B/D/D2模式(6回合): ND->緊急, ND->潛在, RF過剩->緊急, RF過剩->潛在, RF加強->緊急, RF加強->潛在
+
+7.5 prep_temp_lists(sources,dests) -> (list,list)
+  temp_sources = [{**s, 'total_transferred':0} for s in sources]
+  temp_destinations = [d.copy() for d in destinations]
+
+7.6 輔助函數:
+  _clamp_target_qty: 限制轉移量不超標
+  _adjust_d_family_remainder: D模式避免1件餘貨
+  _mark_dest_saturated: 標記dest為已飽和(needed_qty=0)
+
+================================================================================
+第8章: 後處理 - services/post_processing.py (163 lines)
+================================================================================
+8.1 optimize_single_piece_transfers(recommendations,mode,create_note_fn) -> list
+目標: 消除Transfer Qty=1的調貨記錄
+分組: (Article, Transfer Site, Transfer OM)
+每組迭代:
+  Strategy A - Rebalance:
+    找同組qty>=3的donor (選qty最大+接收方銷量最高)
+    donor.qty--, single.qty=2
+  Strategy B - Merge:
+    若Strategy A失敗:
+      找qty>=2的merge_target (選接收方銷量最高+qty最大)
+      若group只有2條或single_sales<=target_sales:
+        合併: target.qty++, single.qty=0
+      否則若len>=3:
+        找qty>=2中最大的donor: donor.qty--, single.qty=2
+  移除qty==0的記錄
+最終: 過濾qty>0, refresh_recommendation_fields
+
+8.2 refresh_recommendation_fields(recommendations,mode,create_note_fn)
+  遍歷重算: After Transfer Stock (含累計扣減), Cumulative Received Qty, Notes
+  維護 source_running[(Article,Site,OM)] 和 receive_running[(Article,Site)]
+
+8.3 get_record_sales_total(rec,prefix) -> int
+  int(rec[prefix+' Last Month Sold Qty']) + int(rec[prefix+' MTD Sold Qty'])
+
+8.4 infer_source_rp_type(source_type) -> str
+  'ND' in source_type -> 'ND' else 'RF'
+
+================================================================================
+第9章: 質量檢查 - services/quality_checks.py (109 lines)
+================================================================================
+run_quality_checks(recommendations,df,skip_nd_check=False) -> (passed,errors)
+8項檢查:
+  1. Article欄位完整性: 每條建議必有Article
+  2. Transfer Qty正整數: int且>0
+  3. 累計不超原始庫存: cum[(article,site)].qty <= df[SaSa Net Stock]
+  4. 轉出≠接收: Transfer Site != Receive Site
+  5. Article 12位格式: str且len==12
+  6. 禁止雙重角色: transfer_sites ∩ receive_sites == ∅ (per Article)
+  7. ND不接收: RP Type=='ND'的Site不能作為Receive Site (skip_nd_check時跳過)
+  8. 重點補0不超標: dest_type=='重點補0'的cum_received <= Target Qty
+
+================================================================================
+第10章: 策略層 (strategies/)
+================================================================================
+10.1 BaseMatchStrategy (base.py): 抽象類, match()方法簽名
+10.2 is_hd_to_hk_restricted (predicates.py):
+     source_site.upper().startswith('HD') AND dest_site.upper().startswith(('HA','HB','HC'))
+10.3 BSpecialStrategy (b_special.py, 60 lines):
+     8回合匹配: (1,1,None),(1,2,None),(2,1,'RF過剩'),(2,2,'RF過剩'),
+                (2,1,'Local全轉出'),(2,2,'Local全轉出'),(2,1,'RF加強'),(2,2,'RF加強')
+10.4 C2ModeStrategy (c2_mode.py, 75 lines): dest優先級排序, source遍歷, HD/Windy限制
+10.5 E1ModeStrategy (e1_mode.py, 84 lines): 僅同OM, HD限制, 接收上限/店數限制
+10.6 E2ModeStrategy (e2_mode.py, 247 lines): 3-Phase (同OM, 跨OM回退, C模式回退)
+10.7 FModeStrategy (f_mode.py, 111 lines): P1/P2處理, 來源排序鍵(同OM>跨OM,ND>RF,hd_penalty,windy_penalty)
+10.8 NDModeStrategy (nd_mode.py, 89 lines): dest-first, 接收上限, 店數限制
+10.9 SimplifiedSKUStrategy (simplified_sku.py, 101 lines): 最少2件, D001退回
+
+================================================================================
+第11章: Excel輸出 - excel_generator.py (347 lines)
+================================================================================
+11.1 generate_filename(): "調貨建議_{YYYYMMDD_HHMMSS}.xlsx" (HKT時區)
+11.2 create_transfer_recommendations_sheet(writer, recommendations):
+  19個欄位: Brand, Article, Product Desc, Transfer/Receive OM/Site, Transfer Qty,
+  Transfer Original/After Stock, Transfer Safety/MOQ, Remark, Notes,
+  Transfer/Receive Site Last Month/MTD Sold Qty, Receive Original Stock
+  標題格式: D7E4BC背景, Arial 10pt, bold
+  Remark格式: "{source_type} -> {dest_type}"
+11.3 create_summary_dashboard_sheet(writer, statistics):
+  KPI, 按Article, 按OM, 轉出類型, 接收類型分析
+11.4 generate_excel_file(): 使用BytesIO在記憶體生成, 無磁碟IO
+
+
+================================================================================
+第12章: 統計分析 - services/statistics.py (69 lines)
+================================================================================
+compute_transfer_statistics(recommendations) -> {
+  'total_recommendations': len(list),
+  'total_transfer_qty': sum(rec.Transfer Qty),
+  'unique_articles': len(set(articles)),
+  'unique_oms': len(set(transfer_oms)),
+  'article_stats': {article: {total_qty, count, om_count}},
+  'om_stats': {om: {total_qty, transfer_qty, receive_qty, count, article_count}},
+  'source_type_stats': {source_type: {count, qty}},
+  'dest_type_stats': {dest_type: {count, qty}}
+}
+
+================================================================================
+第13章: UI組件
+================================================================================
+13.1 側邊欄 (ui/sidebar.py, 325 lines):
+  - 系統資訊卡 (版本號VERSION, 開發者Ricky Yue)
+  - 核心功能expander (24模式列表, 智能識別, 特殊功能, 自動化功能)
+  - 操作指引expander (5步驟: 上傳/選模式/啟動/查看/下載)
+  - 模式選擇radio: MODE_OPTIONS = ["A: 保守轉貨", "B: 加強轉貨", ...]
+  - 接收店數限制radio (B2/B2a/B2L/B2La/B3/B3a/B3L/B3La/E1/E1b/E2/ND1/ND2):
+    "優先1間"->1, "最多2間"->2, "不限制"->None
+  - F2 HD轉出選項radio (僅F2): "HD不能轉出"->False, "HD可轉出(最後優先)"->True
+  - 詳細模式說明expander (所有模式概要, 轉出/接收類型, 接收條件)
+
+13.2 結果展示 (ui/display.py, 299 lines):
+  render_upload_requirements(mode_code): 根據模式顯示不同欄位需求
+  render_data_preview: 總行數/商品數/店鋪數KPI, 前10行預覽
+  render_kpi_cards: 4個KPI(建議數/件數/產品數/OM數)
+  render_results_table: 調貨建議清單 (含來源/目標庫存資訊)
+    Zeabur效能模式: ZEABUR_RESULT_PREVIEW_LIMIT限制預覽行數
+  render_statistics: 詳細統計expander (按產品/OM/轉出類型/接收類型)
+  render_download_button: Excel下載
+
+13.3 模式教學頁 (ui/tutorial.py, 968 lines):
+  8個expander分組: 全局規則, 基本(A,B), B2系列, B3系列, C系列, D系列, E系列, F系列, ND/SKU組
+  每模式含: 場景, 風險徽章, 來源/目標流程圖, 匹配順序, 場景/差異對比表, 補充說明
+  決策指南: 流程圖+24模式對比表
+
+13.4 主入口 (app.py, 255 lines):
+  - 雙分頁: "調貨系統" + "模式教學"
+  - B2系列檢查Type欄位; F模式ND+Target衝突偵測
+  - 緩存機制: @st.cache_data預處理, run_key防重複
+  - 進度條流程: 10%->25%->60%->70%->90%->100%
+
+================================================================================
+第14章: Dependencies & 配置
+================================================================================
+14.1 requirements.txt (7個依賴):
+  pandas>=2.0.0, openpyxl>=3.1.0, python-calamine>=0.1.0,
+  streamlit>=1.28.0, numpy>=1.24.0, xlsxwriter>=3.1.0, ftfy>=6.2.0
+
+14.2 config.py 完整配置:
+  VERSION = "v2.15.0"
+  ZEABUR_ENV_KEYS: Zeabur部署檢測
+  IS_ZEABUR_RUNTIME: 自動檢測
+  ZEABUR_RESULT_PREVIEW_LIMIT: default 1000
+
+Magic Numbers:
+  A_MODE_PERCENTAGE_CAP = 0.2       # A模式20%上限
+  A_MODE_MIN_TRANSFER = 2           # A模式最少2件
+  B_MODE_PERCENTAGE_CAP = 0.5       # B模式50%上限
+  B_MODE_MIN_TRANSFER = 2           # B模式最少2件
+  C_MODE_PERCENTAGE_CAP = 0.3       # C模式30%上限
+  C_MODE_ABS_CAP = 3               # C模式絕對上限3件
+  C1_MODE_MIN_TRANSFER = 2          # C1模式最少2件
+  SAFETY_RECEIVE_MULTIPLIER = 2     # B2/E系列接收上限 = Safety×2
+  MIN_RECEIVE_FLOOR = 3            # 接收下限3件
+  F_TARGET_MULTIPLIER = 0.5        # 補0目標 = Safety×0.5
+  F_TARGET_FLOOR = 3               # 補0下限3件
+  SIMPLIFIED_SKU_RECEIVE_MULTIPLIER = 2  # 精簡SKU cap乘數
+  ND_RECEIVE_MULTIPLIER = 2        # ND接收上限 = 銷量×2
+  OUTLIER_CAP = 100000             # 銷量異常上限
+  FILE_SIZE_LIMIT_BYTES = 50*1024*1024  # 50MB
+
+欄位定義:
+  REQUIRED_COLUMNS: 10個
+  OPTIONAL_COLUMNS: 5個
+  INTEGER_COLUMNS: 6個
+  STRING_COLUMNS: 3個
+
+主題配色 (Kilo.ai dark mode):
+  bg_primary: #0A0A0F, accent: #F5A623 (金橙), success: #10B981
+
+================================================================================
+第15章: 預設店舖資料 (data/stores.json, 87間)
+================================================================================
+結構: Site Code -> {shop, regional, class_1, class_2, size, om, type}
+
+分佈:
+  HA* (香港島, 17間): 店舖如 HA02(駱克), HA06(北角), HA15(新中環), HA32(皇室堡)等
+    OM: Ivy, Violet, Queenie, Candy
+    Type: T(遊客), M(混合), L(本地)
+
+  HB* (九龍, 31間): 店舖如 HB01(加連威), HB11(德福), HB29(重慶站), HB96(啟德)等
+    OM: Ivy, Hippo, Eva, Candy, Violet
+    Type: T, M, L
+
+  HC* (新界, 30間): 店舖如 HC02(荃灣), HC05(上水), HC63(新東涌)等
+    OM: Eva, Candy, Queenie, Hippo
+    Type: T, M, L
+
+  HD* (澳門, 9間): 店舖如 HD02(高士德), HD03(議事亭), HD09(新威尼斯人)等
+    OM: Windy (唯一)
+    Type: T(多為遊客區), L(少數)
+
+OM總覽: Ivy(14間), Hippo(14間), Candy(12間), Eva(12間), Queenie(11間), Violet(9間), Windy(9間)
+Type: T=30間, M=23間, L=28間
+
+================================================================================
+第16章: Notes/Remark生成邏輯
+================================================================================
+16.1 create_recommendation_note() (services/notes.py, 147 lines)
+輸出格式: pipe分隔 "【欄位】值 | 【欄位】值 | ..."
+
+轉出分析 (_note_source_analysis, 依source_type):
+  ND智能轉出: 0銷量優先/兩月銷量, 轉後剩餘
+  ND轉出: 無庫存限制,可全數轉出
+  F模式ND轉出: 無庫存限制,全數轉出
+  ND清貨轉出(D/D2): 轉後剩餘,已優化避免1件
+  F模式RF轉出: 可忽視最小庫存要求,轉後剩餘
+  E模式強制轉出: ALL標記,同OM/跨OM,ND/RF,原始庫存,轉後剩餘
+  Local店舖全轉出: 可全數轉出 / 保留2件後轉出(L系列)
+  RF過剩轉出: 轉後剩餘仍高於Safety
+  RF加強轉出: 轉後剩餘可能低於Safety
+  精簡SKU ND轉出: 全數可轉出
+  精簡SKU RF轉出: 超出Cap部分轉出,2月銷量
+
+接收分析 (_note_dest_analysis, 依dest_type):
+  F模式目標接收: 目標數量,累計已接收
+  E模式接收/E1b: 當前總庫存,安全庫存,接收上限(2倍Safety),累計已接收
+  重點補0: 目標數量,累計已接收,缺口
+  ND潛在缺貨接收: 兩月銷量,接收上限(2x),累計已接收
+  RF緊急缺貨補貨: 零庫存但有銷售記錄
+  緊急缺貨補貨: 零庫存但有銷售記錄
+  潛在缺貨補貨: 庫存不足,補充至Safety
+  精簡SKU接收: 接收上限Cap,累計已接收
+
+16.2 Remark (excel_generator.py):
+  "{source_type} -> {dest_type}" (簡潔映射)
+
+================================================================================
+第17章: 關鍵Magic Numbers快速參考
+================================================================================
+轉出上限:
+  A: min(20%total, SaSa) at least 2, must keep >= safety
+  B: min(50%total, SaSa) at least 2, can go below safety
+  C: min(30%total, 3, SaSa) at least 1
+  C1: min(30%total, 3, SaSa) at least 2, net_stock > 2
+  D/D2: ND全轉出, RF同A
+  E: 全轉出
+  F: 全轉出 (Target店除外)
+  ND: 全轉出
+  精簡SKU: 超出Cap(Safety*2,2Mon*2)部分
+
+接收上限:
+  一般A/B: Safety Stock
+  C重點補0: max(Safety*0.5, 3)
+  B2系列/E系列: max(Safety*2, 3)
+  精簡SKU: max(Safety*2, Last2Month*2)
+  ND: 2 * (LastMonth+MTD)
+  F/F2: Target Qty (直接)
+
+================================================================================
+第18章: Cross-OM & 特殊規則
+================================================================================
+18.1 is_hd_to_hk_restricted(source_site, dest_site)
+  source以'HD'開頭 AND dest以('HA','HB','HC')開頭 -> 禁止
+  原因: 澳門(HD) -> 香港(HA/HB/HC)受地理/關稅限制
+
+18.2 Windy限制
+  source.om=='Windy'且dest.om!='Windy' -> 禁止 (Windy只轉Windy)
+  Windy可接收其他OM的來源
+  原因: 澳門市場獨立
+
+18.3 適用模式:
+  HD限制: C2, B3/B3a/B3L/B3La, E1/E1b/E2, F/F2, ND2, 精簡SKU(跨OM)
+  例外: A, B, B2/B2a/B2L/B2La, C, C1, D, D2, ND1, 精簡SKU(限同OM) 不適用
+  F2特殊: hd_penalty=10 (HD可轉出選項, 最低優先)
+
+  Windy限制: C2, B3/B3a/B3L/B3La, E2, F/F2, ND2, 精簡SKU(跨OM)
+  F2特殊: windy_penalty=5 (Windy目標優先從同OM無Target店提取)
+
+18.4 B3_family特殊性
+  即使同OM配對，B3系列也檢查HD/Windy限制 (因cross_om_grouping可能產生同OM配對)
+
+================================================================================
+第19章: 架構設計要點 & 重構建議 (供新系統參考)
+================================================================================
+19.1 核心數據流:
+  Excel -> DataProcessor.preprocess_data() -> DataFrame
+  -> TransferLogic.generate_transfer_recommendations(df,mode)
+     -> grouped by (Article[,OM])
+     -> 每組: identify_sources() -> identify_destinations() -> source_filter -> strategy/match
+        -> match_by_priority() * N rounds -> can_transfer() -> compute_transfer_qty()
+        -> build_recommendation() + apply_transfer()
+     -> optimize_single_piece_transfers() + refresh_recommendation_fields()
+  -> perform_quality_checks()
+  -> get_transfer_statistics()
+  -> ExcelGenerator.generate_excel_file()
+
+19.2 build_recommendation() 輸出欄位 (services/recommendation_factory.py):
+  Article, Product Desc, Transfer OM, Transfer Site, Receive OM, Receive Site,
+  Transfer Qty, Original Stock, After Transfer Stock, Safety Stock, MOQ,
+  Source Priority, Destination Priority, Source Type, Destination Type, Notes,
+  Transfer Site Last Month/MTD Sold Qty, Receive Site Last Month/MTD Sold Qty,
+  Receive Original Stock, [Target Qty], Cumulative Received Qty
+
+19.3 apply_transfer() 記帳:
+  source.total_transferred += transfer_qty
+  source.transferable_qty -= transfer_qty
+  dest.needed_qty = max(0, dest.needed_qty - transfer_qty)
+  received_qty_by_site[key] = current + transfer_qty
+
+19.4 現有架構可改進點:
+  1. 依賴注入: TransferLogic與matching_engine/strategies循環依賴
+     建議: 提取ModeContext frozen dataclass, 純函式化
+  2. 來源/目的地識別: _sources_general過於複雜
+     建議: 每個模式獨立定義sources/dests邏輯
+  3. 類型標記: 使用字串(如'RF過剩轉出')
+     建議: 使用Enum
+  4. 跨OM邏輯: HD/Windy檢查散落各處
+     建議: 統一cross_om_validator函數
+  5. 測試: 大量legacy測試, 建議整理
+
+19.5 性能優化 (現有):
+  calamine Rust引擎讀取Excel (5-10x快於openpyxl)
+  article_site_index: 預建(Article,Site)->(Safety,MOQ)索引, O(1)查詢
+  _mode_info_cache: 快取模式資訊避免重複計算
+  streamlit @st.cache_data: 預處理緩存
+  Zeabur result preview limit: 避免大結果表卡頓
+
+================================================================================
+                            文件結束
+================================================================================
