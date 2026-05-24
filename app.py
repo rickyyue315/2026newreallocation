@@ -47,7 +47,6 @@ def main():
 
     with tab2:
         render_tutorial_page()
-        return
 
     with tab1:
         mode_code, receive_site_limit, f2_hd_transfer = render_sidebar()
