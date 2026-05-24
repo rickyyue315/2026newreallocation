@@ -6,7 +6,7 @@ from excel_generator import ExcelGenerator
 
 
 def render_upload_requirements(mode_code: str):
-    st.markdown("### 📤 上傳需求")
+    st.markdown("#### 📤 上傳需求")
 
     base_cols = "Article, OM, RP Type, Site, SaSa Net Stock, Pending Received, Safety Stock, Last Month/MTD Sold Qty, MOQ"
 
@@ -23,11 +23,11 @@ def render_upload_requirements(mode_code: str):
     st.info(f"必填欄位：{base_cols}{extra}")
 
     article_fmt = "000000000000 (12 digits)"
-    st.caption(f"Article格式: {article_fmt}")
+    st.caption(f"**Article格式**: {article_fmt}")
 
 
 def render_data_preview(df: pd.DataFrame, stats: dict):
-    st.markdown("### 📊 數據預覽")
+    st.markdown("#### 📊 數據預覽")
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -49,7 +49,7 @@ def render_data_preview(df: pd.DataFrame, stats: dict):
 
 
 def render_kpi_cards(statistics: dict):
-    st.markdown("### 📈 處理結果")
+    st.markdown("#### 📈 處理結果")
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -63,7 +63,7 @@ def render_kpi_cards(statistics: dict):
 
 
 def render_results_table(recommendations: list):
-    st.markdown("### 📋 調貨建議清單")
+    st.markdown("#### 📋 調貨建議清單")
 
     if not recommendations:
         st.warning("無調貨建議")

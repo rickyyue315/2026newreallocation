@@ -105,17 +105,17 @@ EXCEL_HEADER_SIZE = 10
 
 THEME = {
     "bg_primary": "#0D1117",
-    "bg_secondary": "#161B22",
-    "bg_card": "#1C2128",
-    "accent": "#00D4AA",
-    "accent_secondary": "#7C3AED",
-    "success": "#10B981",
-    "warning": "#F59E0B",
-    "danger": "#EF4444",
-    "info": "#3B82F6",
-    "text_primary": "#F0F6FC",
-    "text_secondary": "#8B949E",
-    "border": "#30363D",
+    "bg_secondary": "#1A1F2E",
+    "bg_card": "#21262D",
+    "accent": "#00FFB9",
+    "accent_secondary": "#A855F7",
+    "success": "#22D3EE",
+    "warning": "#FBBF24",
+    "danger": "#F87171",
+    "info": "#60A5FA",
+    "text_primary": "#FFFFFF",
+    "text_secondary": "#A0AEC0",
+    "border": "#3D4450",
 }
 
 MODE_OPTIONS = [

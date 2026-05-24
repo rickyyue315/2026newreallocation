@@ -9,44 +9,44 @@ def render_sidebar() -> tuple[str, int | None, bool]:
         st.markdown(
             f"""
             <div class="info-card" style="text-align: center;">
-                <h3 style="margin-bottom: 0.3rem;">📦 庫存調貨建議系統</h3>
-                <p style="color:#8B949E;font-size:0.85rem;margin:0;">Intelligent Inventory Reallocation</p>
-                <hr style="margin: 0.8rem 0;border-color: #30363D;">
-                <p style="color:#00D4AA;font-size:0.75rem;margin:0;">Version {VERSION} | Ricky Yue</p>
+                <h3 style="margin-bottom: 0.2rem;">📦 庫存調貨系統</h3>
+                <p style="color:#A0AEC0;font-size:0.8rem;margin:0;">Intelligent Inventory Reallocation</p>
+                <hr style="margin: 0.6rem 0;border-color: #3D4450;">
+                <p style="color:#00FFB9;font-size:0.75rem;margin:0;">Version {VERSION} | Ricky Yue</p>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        st.markdown("### 🎯 核心功能")
+        st.markdown("#### 🎯 核心功能")
         st.markdown("""
-        <div style="color:#8B949E;font-size:0.9rem;">
-        - <span style="color:#00D4AA">24種調貨模式</span>: A/B/C/D/E/F/ND/精簡SKU<br>
-        - <span style="color:#7C3AED">智能識別</span>: 自動標記ND清貨/RF過剩/重點補0<br>
-        - <span style="color:#3B82F6">跨OM限制</span>: HD→HK不可, Windy只轉Windy<br>
-        - <span style="color:#10B981">自動化</span>: 單件消除、質量檢查、統計生成
+        <div style="color:#A0AEC0;font-size:0.85rem;line-height:1.6;">
+        • <span style="color:#00FFB9;font-weight:600;">24種調貨模式</span>: A/B/C/D/E/F/ND<br>
+        • <span style="color:#A855F7;font-weight:600;">智能識別</span>: ND清貨/RF過剩/補0<br>
+        • <span style="color:#60A5FA;font-weight:600;">跨OM限制</span>: HD→HK不可<br>
+        • <span style="color:#22D3EE;font-weight:600;">自動化</span>: 單件消除/質量檢查
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("### 📋 操作指引")
+        st.markdown("#### 📋 操作指引")
         st.markdown("""
-        <div style="color:#8B949E;font-size:0.9rem;">
-        1. <span style="color:#F0F6FC">上傳檔案</span>: Excel (.xlsx/.xls)<br>
-        2. <span style="color:#F0F6FC">選擇模式</span>: 從24種模式中選擇<br>
-        3. <span style="color:#F0F6FC">啟動處理</span>: 點擊執行按鈕<br>
-        4. <span style="color:#F0F6FC">查看結果</span>: KPI及詳細表格<br>
-        5. <span style="color:#F0F6FC">下載報告</span>: Excel格式輸出
+        <div style="color:#A0AEC0;font-size:0.85rem;line-height:1.6;">
+        <span style="color:#00FFB9;">1.</span> <span style="color:#FFFFFF;">上傳Excel檔案</span><br>
+        <span style="color:#00FFB9;">2.</span> <span style="color:#FFFFFF;">選擇24種模式之一</span><br>
+        <span style="color:#00FFB9;">3.</span> <span style="color:#FFFFFF;">點擊執行按鈕</span><br>
+        <span style="color:#00FFB9;">4.</span> <span style="color:#FFFFFF;">查看KPI與結果表格</span><br>
+        <span style="color:#00FFB9;">5.</span> <span style="color:#FFFFFF;">下載Excel報告</span>
         </div>
         """, unsafe_allow_html=True)
 
         st.markdown("---")
 
-        st.markdown("### ⚙️ 調貨模式設定")
+        st.markdown("#### ⚙️ 調貨模式設定")
         selected_option = st.selectbox(
             "選擇模式",
             MODE_OPTIONS,
             index=0,
-            help="選擇調貨模式，詳見模式說明",
+            help="選擇調貨模式",
         )
 
         mode_code = selected_option.split(":")[0].strip()
@@ -61,7 +61,6 @@ def render_sidebar() -> tuple[str, int | None, bool]:
                 ["優先1間", "最多2間", "不限制"],
                 index=2,
                 horizontal=True,
-                help="限制每個Article的接收店數量",
             )
             limit_map = {"優先1間": 1, "最多2間": 2, "不限制": None}
             receive_limit = limit_map.get(limit_choice)
@@ -72,7 +71,6 @@ def render_sidebar() -> tuple[str, int | None, bool]:
                 ["HD不能轉出", "HD可轉出(最後優先)"],
                 index=0,
                 horizontal=True,
-                help="控制澳門(HD)店舖是否可以作為轉出來源",
             )
             f2_hd_transfer = hd_choice == "HD可轉出(最後優先)"
 
