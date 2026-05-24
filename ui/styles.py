@@ -23,12 +23,12 @@ def apply_styles():
             transition: all 0.3s;
         }}
         .stButton > button:hover {{
-            background-color: #d48f1e;
+            background-color: #d9901a;
             transform: translateY(-1px);
         }}
         .kpi-card {{
-            background: linear-gradient(135deg, #1a1a2e, #16213e);
-            border: 1px solid #2a2a4a;
+            background: linear-gradient(135deg, #141420, #0c0c14);
+            border: 1px solid #1f1f30;
             border-radius: 12px;
             padding: 1.2rem;
             text-align: center;
@@ -45,8 +45,8 @@ def apply_styles():
             margin-top: 0.3rem;
         }}
         .info-card {{
-            background: linear-gradient(135deg, #1e293b, #0f172a);
-            border: 1px solid #334155;
+            background: linear-gradient(135deg, #161628, #0e0e1a);
+            border: 1px solid #22223a;
             border-radius: 10px;
             padding: 1rem;
             margin-bottom: 0.8rem;
@@ -55,7 +55,7 @@ def apply_styles():
             font-size: 1.5rem;
         }}
         hr {{
-            border-color: #2a2a4a;
+            border-color: #1f1f30;
         }}
         .stDownloadButton > button {{
             background-color: {THEME["success"]};
@@ -64,7 +64,7 @@ def apply_styles():
             font-weight: 600;
         }}
         .stDownloadButton > button:hover {{
-            background-color: #0d9668;
+            background-color: #0ca870;
         }}
         </style>
         """,
