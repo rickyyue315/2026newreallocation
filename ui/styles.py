@@ -9,10 +9,13 @@ def apply_styles():
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Inter:wght@400;500;600;700&display=swap');
 
+        html, body, .stApp {{
+            background-color: {THEME["bg_primary"]} !important;
+            color: {THEME["text_primary"]} !important;
+            font-family: 'Noto Sans TC', 'Inter', sans-serif;
+        }}
         .stApp {{
             background-color: {THEME["bg_primary"]};
-            color: {THEME["text_primary"]};
-            font-family: 'Noto Sans TC', 'Inter', sans-serif;
         }}
         .main .block-container {{
             padding-top: 0.3rem;
@@ -20,6 +23,10 @@ def apply_styles():
             padding-left: 1rem;
             padding-right: 1rem;
             max-width: 100%;
+            background-color: {THEME["bg_primary"]};
+        }}
+        [data-testid="stMainBlockContainer"] {{
+            background-color: {THEME["bg_primary"]};
         }}
         .stTabs [data-baseweb="tab-list"] {{
             gap: 6px;
@@ -37,7 +44,6 @@ def apply_styles():
         .stTabs [aria-selected="true"] {{
             background-color: {THEME["bg_card"]} !important;
             color: {THEME["accent"]} !important;
-            border-bottom: 2px solid {THEME["accent"]};
         }}
         .stButton > button {{
             background: linear-gradient(135deg, {THEME["accent"]}, #00CC96);
@@ -105,7 +111,7 @@ def apply_styles():
         }}
         .stMetric label {{
             color: {THEME["text_primary"]} !important;
-            font-weight: 500;
+            font-weight: 600 !important;
         }}
         .stMetric value {{
             color: {THEME["accent"]} !important;
@@ -120,57 +126,67 @@ def apply_styles():
             color: {THEME["text_primary"]};
             font-weight: 500;
         }}
-        .stSelectbox [data-baseweb="select"] {{
-            background-color: {THEME["bg_card"]};
-            border-radius: 8px;
+        [data-testid="stExpander"] {{
+            background-color: {THEME["bg_secondary"]} !important;
+        }}
+        [data-testid="stExpanderContent"] {{
+            background-color: {THEME["bg_secondary"]} !important;
         }}
         .stSelectbox label {{
             color: {THEME["text_primary"]} !important;
+        }}
+        .stSelectbox [data-baseweb="select"] {{
+            background-color: {THEME["bg_card"]} !important;
         }}
         .stRadio label {{
             color: {THEME["text_primary"]} !important;
         }}
         [data-testid="stSidebar"] {{
-            background-color: {THEME["bg_secondary"]};
+            background-color: {THEME["bg_secondary"]} !important;
             border-right: 1px solid {THEME["border"]};
             padding-top: 1rem;
         }}
         [data-testid="stSidebar"] .stMarkdown {{
             color: {THEME["text_primary"]};
         }}
-        h1, h2, h3, h4 {{
-            color: {THEME["text_primary"]};
+        [data-testid="stSidebar"] h3 {{
+            color: {THEME["accent"]};
         }}
-        h1 {{ font-size: 1.5rem; margin-bottom: 0.3rem; }}
+        h1, h2, h3, h4, h5, h6 {{
+            color: {THEME["text_primary"]} !important;
+        }}
+        h1 {{ font-size: 1.5rem; margin-bottom: 0.3rem; color: {THEME["accent"]} !important; }}
         h2 {{ font-size: 1.2rem; margin-top: 0.5rem; margin-bottom: 0.3rem; }}
         h3 {{ font-size: 1rem; margin-top: 0.3rem; }}
+        h4 {{ font-size: 0.9rem; margin-top: 0.2rem; }}
         .stCaption {{
-            color: {THEME["text_secondary"]};
+            color: {THEME["text_secondary"]} !important;
         }}
         .stFileUploader {{
             background-color: {THEME["bg_card"]};
             border-radius: 10px;
-            border: 2px dashed {THEME["border"]};
+            border: 2px dashed {THEME["border"]} !important;
             padding: 0.8rem;
         }}
         .stAlert {{
             border-radius: 10px;
             border: none;
         }}
-        .stSuccess {{
-            background-color: rgba(34, 211, 238, 0.15);
+        .stSuccess, [data-testid="stSuccess"] {{
+            background-color: rgba(34, 211, 238, 0.2) !important;
+            color: #FFFFFF !important;
         }}
-        .stWarning {{
-            background-color: rgba(251, 191, 36, 0.15);
+        .stWarning, [data-testid="stWarning"] {{
+            background-color: rgba(251, 191, 36, 0.2) !important;
+            color: #FFFFFF !important;
         }}
-        .stError {{
-            background-color: rgba(248, 113, 113, 0.15);
+        .stError, [data-testid="stError"] {{
+            background-color: rgba(248, 113, 113, 0.2) !important;
+            color: #FFFFFF !important;
         }}
-        .stInfo {{
-            background-color: rgba(96, 165, 250, 0.15);
-        }}
-        div[data-testid="stHorizontalBlock"] {{
-            gap: 0.8rem;
+        .stInfo, [data-testid="stInfo"] {{
+            background-color: rgba(96, 165, 250, 0.2) !important;
+            color: #FFFFFF !important;
         }}
         section[data-testid="stHorizontalBlock"] > div {{
             background-color: {THEME["bg_card"]};
@@ -180,6 +196,53 @@ def apply_styles():
         }}
         .streamlit-expanderHeader {{
             color: {THEME["text_primary"]} !important;
+        }}
+        div[data-testid="stHorizontalBlock"] {{
+            gap: 0.8rem;
+        }}
+        .stTable {{
+            background-color: {THEME["bg_card"]} !important;
+            border-radius: 10px;
+        }}
+        .stTable th {{
+            background-color: {THEME["bg_secondary"]} !important;
+            color: {THEME["accent"]} !important;
+        }}
+        .stTable td {{
+            color: {THEME["text_primary"]} !important;
+        }}
+        table {{
+            background-color: {THEME["bg_card"]} !important;
+            color: {THEME["text_primary"]} !important;
+        }}
+        th, td {{
+            background-color: {THEME["bg_card"]} !important;
+            color: {THEME["text_primary"]} !important;
+            border-color: {THEME["border"]} !important;
+        }}
+        thead {{
+            background-color: {THEME["bg_secondary"]} !important;
+        }}
+        thead th {{
+            color: {THEME["accent"]} !important;
+        }}
+        [data-testid="stDataFrame"] {{
+            background-color: {THEME["bg_card"]} !important;
+        }}
+        .dataframe {{
+            background-color: {THEME["bg_card"]} !important;
+        }}
+        .dataframe thead {{
+            background-color: {THEME["bg_secondary"]} !important;
+        }}
+        .dataframe th {{
+            color: {THEME["accent"]} !important;
+        }}
+        .dataframe td {{
+            color: {THEME["text_primary"]} !important;
+        }}
+        .stProgress bar {{
+            background-color: {THEME["accent"]};
         }}
         </style>
         """,

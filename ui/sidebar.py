@@ -10,8 +10,8 @@ def render_sidebar() -> tuple[str, int | None, bool]:
             f"""
             <div class="info-card" style="text-align: center;">
                 <h3 style="margin-bottom: 0.2rem;">📦 庫存調貨系統</h3>
-                <p style="color:#A0AEC0;font-size:0.8rem;margin:0;">Intelligent Inventory Reallocation</p>
-                <hr style="margin: 0.6rem 0;border-color: #3D4450;">
+                <p style="color:#D1D5DB;font-size:0.8rem;margin:0;">Intelligent Inventory Reallocation</p>
+                <hr style="margin: 0.6rem 0;border-color: #2D3748;">
                 <p style="color:#00FFB9;font-size:0.75rem;margin:0;">Version {VERSION} | Ricky Yue</p>
             </div>
             """,
@@ -20,22 +20,22 @@ def render_sidebar() -> tuple[str, int | None, bool]:
 
         st.markdown("#### 🎯 核心功能")
         st.markdown("""
-        <div style="color:#A0AEC0;font-size:0.85rem;line-height:1.6;">
-        • <span style="color:#00FFB9;font-weight:600;">24種調貨模式</span>: A/B/C/D/E/F/ND<br>
-        • <span style="color:#A855F7;font-weight:600;">智能識別</span>: ND清貨/RF過剩/補0<br>
-        • <span style="color:#60A5FA;font-weight:600;">跨OM限制</span>: HD→HK不可<br>
-        • <span style="color:#22D3EE;font-weight:600;">自動化</span>: 單件消除/質量檢查
+        <div style="color:#D1D5DB;font-size:0.85rem;line-height:1.7;">
+        • <span style="color:#00FFB9;font-weight:700;">24種調貨模式</span>: A/B/C/D/E/F/ND<br>
+        • <span style="color:#C084FC;font-weight:700;">智能識別</span>: ND清貨/RF過剩/補0<br>
+        • <span style="color:#60A5FA;font-weight:700;">跨OM限制</span>: HD→HK不可<br>
+        • <span style="color:#22D3EE;font-weight:700;">自動化</span>: 單件消除/質量檢查
         </div>
         """, unsafe_allow_html=True)
 
         st.markdown("#### 📋 操作指引")
         st.markdown("""
-        <div style="color:#A0AEC0;font-size:0.85rem;line-height:1.6;">
-        <span style="color:#00FFB9;">1.</span> <span style="color:#FFFFFF;">上傳Excel檔案</span><br>
-        <span style="color:#00FFB9;">2.</span> <span style="color:#FFFFFF;">選擇24種模式之一</span><br>
-        <span style="color:#00FFB9;">3.</span> <span style="color:#FFFFFF;">點擊執行按鈕</span><br>
-        <span style="color:#00FFB9;">4.</span> <span style="color:#FFFFFF;">查看KPI與結果表格</span><br>
-        <span style="color:#00FFB9;">5.</span> <span style="color:#FFFFFF;">下載Excel報告</span>
+        <div style="color:#D1D5DB;font-size:0.85rem;line-height:1.8;">
+        <span style="color:#00FFB9;font-weight:700;">1.</span> <span style="color:#FFFFFF;font-weight:600;">上傳Excel檔案</span><br>
+        <span style="color:#00FFB9;font-weight:700;">2.</span> <span style="color:#FFFFFF;font-weight:600;">選擇24種模式之一</span><br>
+        <span style="color:#00FFB9;font-weight:700;">3.</span> <span style="color:#FFFFFF;font-weight:600;">點擊執行按鈕</span><br>
+        <span style="color:#00FFB9;font-weight:700;">4.</span> <span style="color:#FFFFFF;font-weight:600;">查看KPI與結果表格</span><br>
+        <span style="color:#00FFB9;font-weight:700;">5.</span> <span style="color:#FFFFFF;font-weight:600;">下載Excel報告</span>
         </div>
         """, unsafe_allow_html=True)
 

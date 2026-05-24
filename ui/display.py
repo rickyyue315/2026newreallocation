@@ -39,7 +39,7 @@ def render_data_preview(df: pd.DataFrame, stats: dict):
         sites = df["Site"].nunique() if "Site" in df.columns else 0
         st.metric("店鋪數", sites)
 
-    with st.expander("查看前10行", expanded=False):
+    with st.expander("🔍 查看前10行", expanded=False):
         st.dataframe(df.head(10), use_container_width=True)
 
     if stats.get("om_filled", 0) > 0:
@@ -66,7 +66,7 @@ def render_results_table(recommendations: list):
     st.markdown("#### 📋 調貨建議清單")
 
     if not recommendations:
-        st.warning("無調貨建議")
+        st.warning("⚠️ 無調貨建議")
         return
 
     df = pd.DataFrame(recommendations)
@@ -81,7 +81,7 @@ def render_results_table(recommendations: list):
 
     limit = ZEABUR_RESULT_PREVIEW_LIMIT if IS_ZEABUR_RUNTIME else None
     if limit and len(df) > limit:
-        st.warning(f"結果過多，僅顯示前 {limit} 行 (Zeabur模式)")
+        st.warning(f"⚠️ 結果過多，僅顯示前 {limit} 行 (Zeabur模式)")
         df = df.head(limit)
 
     st.dataframe(df[display_cols], use_container_width=True, hide_index=True)
@@ -150,9 +150,9 @@ def render_statistics(statistics: dict):
 def render_quality_report(passed: bool, errors: list):
     with st.expander("🔍 質量檢查", expanded=not passed):
         if passed:
-            st.success("所有質量檢查通過!")
+            st.success("✅ 所有質量檢查通過!")
         else:
-            st.error(f"發現 {len(errors)} 個問題:")
+            st.error(f"❌ 發現 {len(errors)} 個問題:")
             for err in errors[:20]:
                 st.warning(err)
             if len(errors) > 20:
