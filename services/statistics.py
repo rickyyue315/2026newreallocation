@@ -70,6 +70,39 @@ def compute_transfer_statistics(recommendations: list) -> dict:
         dest_type_stats[dest_type]["count"] += 1
         dest_type_stats[dest_type]["qty"] += qty
 
+    brand_stats = defaultdict(lambda: {"count": 0, "qty": 0})
+    for r in recommendations:
+        brand = r.get("Brand", "Unknown")
+        qty = r.get("Transfer Qty", 0)
+        brand_stats[brand]["count"] += 1
+        brand_stats[brand]["qty"] += qty
+
+    transfer_store_type_stats = defaultdict(lambda: {"count": 0, "qty": 0})
+    receive_store_type_stats = defaultdict(lambda: {"count": 0, "qty": 0})
+    for r in recommendations:
+        src_type = r.get("Transfer Store Type", "")
+        dst_type = r.get("Receive Store Type", "")
+        qty = r.get("Transfer Qty", 0)
+        if src_type:
+            transfer_store_type_stats[src_type]["count"] += 1
+            transfer_store_type_stats[src_type]["qty"] += qty
+        if dst_type:
+            receive_store_type_stats[dst_type]["count"] += 1
+            receive_store_type_stats[dst_type]["qty"] += qty
+
+    transfer_rp_type_stats = defaultdict(lambda: {"count": 0, "qty": 0})
+    receive_rp_type_stats = defaultdict(lambda: {"count": 0, "qty": 0})
+    for r in recommendations:
+        src_rp = r.get("Transfer RP Type", "")
+        dst_rp = r.get("Receive RP Type", "")
+        qty = r.get("Transfer Qty", 0)
+        if src_rp:
+            transfer_rp_type_stats[src_rp]["count"] += 1
+            transfer_rp_type_stats[src_rp]["qty"] += qty
+        if dst_rp:
+            receive_rp_type_stats[dst_rp]["count"] += 1
+            receive_rp_type_stats[dst_rp]["qty"] += qty
+
     return {
         "total_recommendations": len(recommendations),
         "total_transfer_qty": total_qty,
@@ -79,4 +112,9 @@ def compute_transfer_statistics(recommendations: list) -> dict:
         "om_stats": dict(om_stats),
         "source_type_stats": dict(source_type_stats),
         "dest_type_stats": dict(dest_type_stats),
+        "brand_stats": dict(brand_stats),
+        "transfer_store_type_stats": dict(transfer_store_type_stats),
+        "receive_store_type_stats": dict(receive_store_type_stats),
+        "transfer_rp_type_stats": dict(transfer_rp_type_stats),
+        "receive_rp_type_stats": dict(receive_rp_type_stats),
     }

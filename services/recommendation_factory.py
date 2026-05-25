@@ -98,6 +98,10 @@ def build_recommendation(
         "Source Priority": source.get("priority", 0),
         "Destination Priority": dest.get("priority", 0),
         "Cumulative Received Qty": received_qty_by_site.get(dest.get("site", ""), 0) if received_qty_by_site else 0,
+        "Transfer RP Type": source.get("rp_type", ""),
+        "Receive RP Type": dest.get("rp_type", ""),
+        "Transfer Store Type": source.get("store_type", ""),
+        "Receive Store Type": dest.get("store_type", ""),
     }
 
     target_qty = dest.get("target_qty")

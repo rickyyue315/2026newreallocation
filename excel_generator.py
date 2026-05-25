@@ -10,7 +10,26 @@ from config import (
     EXCEL_HEADER_FONT,
     EXCEL_HEADER_SIZE,
     TRANSFER_EXCEL_COLUMNS,
+    THEME,
 )
+
+_STAT_SECTION_FIELDS: dict[str, list[tuple[str, str]]] = {
+    "article_stats": [
+        ("Total Qty", "total_qty"),
+        ("Count", "count"),
+        ("OM Count", "om_count"),
+    ],
+    "om_stats": [
+        ("Transfer Qty", "transfer_qty"),
+        ("Receive Qty", "receive_qty"),
+        ("Count", "count"),
+        ("Article Count", "article_count"),
+    ],
+    "default": [
+        ("Total Qty", "qty"),
+        ("Count", "count"),
+    ],
+}
 
 
 HKT = timezone(timedelta(hours=8))
@@ -91,6 +110,13 @@ class ExcelGenerator:
         })
         cell_fmt = workbook.add_format({"border": 1})
         num_fmt = workbook.add_format({"border": 1, "num_format": "#,##0"})
+        section_fmt = workbook.add_format({
+            "bg_color": THEME.get("accent", "#D7E4BC"),
+            "bold": True,
+            "font_color": "#000000",
+            "font_size": 11,
+            "border": 1,
+        })
 
         worksheet.write(0, 0, "調貨建議統計 - Summary Dashboard", workbook.add_format({"bold": True, "font_size": 14}))
         worksheet.write(1, 0, f"Version: {VERSION}")
@@ -113,29 +139,48 @@ class ExcelGenerator:
             row += 1
 
         row += 1
-        self._write_stat_section(worksheet, row, "By Article", statistics.get("article_stats", {}), header_fmt, cell_fmt, num_fmt)
-        row += len(statistics.get("article_stats", {})) + 3
+        sections = [
+            ("By Article", "article_stats"),
+            ("By OM", "om_stats"),
+            ("By Source Type", "source_type_stats"),
+            ("By Destination Type", "dest_type_stats"),
+            ("By Brand", "brand_stats"),
+            ("By Transfer Store Type", "transfer_store_type_stats"),
+            ("By Receive Store Type", "receive_store_type_stats"),
+            ("By Transfer RP Type", "transfer_rp_type_stats"),
+            ("By Receive RP Type", "receive_rp_type_stats"),
+        ]
 
-        self._write_stat_section(worksheet, row, "By OM", statistics.get("om_stats", {}), header_fmt, cell_fmt, num_fmt)
-        row += len(statistics.get("om_stats", {})) + 3
-
-        self._write_stat_section(worksheet, row, "By Source Type", statistics.get("source_type_stats", {}), header_fmt, cell_fmt, num_fmt)
-        row += len(statistics.get("source_type_stats", {})) + 3
-
-        self._write_stat_section(worksheet, row, "By Destination Type", statistics.get("dest_type_stats", {}), header_fmt, cell_fmt, num_fmt)
+        for title, key in sections:
+            stats = statistics.get(key, {})
+            if stats:
+                row = self._write_stat_section(worksheet, row, title, stats, section_fmt, cell_fmt, num_fmt, key)
 
         worksheet.set_column(0, 0, 25)
-        worksheet.set_column(1, 3, 15)
+        worksheet.set_column(1, 6, 15)
 
-    def _write_stat_section(self, worksheet, start_row, title, stats, header_fmt, cell_fmt, num_fmt):
-        worksheet.write(start_row, 0, title, header_fmt)
-        worksheet.write(start_row, 1, "Total Qty", header_fmt)
-        worksheet.write(start_row, 2, "Count", header_fmt)
+    def _write_stat_section(self, worksheet, start_row, title, stats, section_fmt, cell_fmt, num_fmt, stats_key=""):
+        fields = _STAT_SECTION_FIELDS.get(stats_key, _STAT_SECTION_FIELDS["default"])
 
-        row = start_row + 1
+        worksheet.merge_range(start_row, 0, start_row, len(fields), title, section_fmt)
+        start_row += 1
+
+        for col_idx, (label, _) in enumerate(fields):
+            worksheet.write(start_row, col_idx, label, worksheet.workbook.add_format({
+                "bold": True, "border": 1, "bg_color": "#E8F0FE",
+            }))
+        start_row += 1
+
         for key, data in sorted(stats.items()):
-            worksheet.write(row, 0, str(key), cell_fmt)
-            if isinstance(data, dict):
-                worksheet.write(row, 1, data.get("total_qty", 0), num_fmt)
-                worksheet.write(row, 2, data.get("count", 0), num_fmt)
-            row += 1
+            if not isinstance(data, dict):
+                continue
+            for col_idx, (_, dict_key) in enumerate(fields):
+                val = data.get(dict_key, 0)
+                fmt = num_fmt if isinstance(val, (int, float)) else cell_fmt
+                if col_idx == 0:
+                    worksheet.write(start_row, col_idx, str(key), cell_fmt)
+                else:
+                    worksheet.write(start_row, col_idx, val, fmt)
+            start_row += 1
+
+        return start_row + 1

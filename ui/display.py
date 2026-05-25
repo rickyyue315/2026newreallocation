@@ -101,6 +101,7 @@ def render_statistics(statistics: dict):
                         "Article": art,
                         "Total Qty": data.get("total_qty", 0),
                         "Records": data.get("count", 0),
+                        "OM Count": data.get("om_count", 0),
                     })
                 st.dataframe(pd.DataFrame(art_data), use_container_width=True, hide_index=True)
 
@@ -109,11 +110,12 @@ def render_statistics(statistics: dict):
             om_stats = statistics.get("om_stats", {})
             if om_stats:
                 om_data = []
-                for om, data in sorted(om_stats.items(), key=lambda x: -x[1].get("total_qty", 0)):
+                for om, data in sorted(om_stats.items(), key=lambda x: -x[1].get("transfer_qty", 0)):
                     om_data.append({
                         "OM": om,
                         "Transfer Qty": data.get("transfer_qty", 0),
                         "Receive Qty": data.get("receive_qty", 0),
+                        "Records": data.get("count", 0),
                         "Articles": data.get("article_count", 0),
                     })
                 st.dataframe(pd.DataFrame(om_data), use_container_width=True, hide_index=True)
@@ -145,6 +147,62 @@ def render_statistics(statistics: dict):
                         "Count": data.get("count", 0),
                     })
                 st.dataframe(pd.DataFrame(dst_data), use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+
+        col5, col6 = st.columns(2)
+
+        with col5:
+            st.markdown("**按品牌 (Brand)**")
+            brand_stats = statistics.get("brand_stats", {})
+            if brand_stats:
+                br_data = []
+                for brand, data in sorted(brand_stats.items(), key=lambda x: -x[1].get("qty", 0)):
+                    br_data.append({
+                        "Brand": brand if brand else "(空白)",
+                        "Qty": data.get("qty", 0),
+                        "Count": data.get("count", 0),
+                    })
+                st.dataframe(pd.DataFrame(br_data), use_container_width=True, hide_index=True)
+
+        with col6:
+            st.markdown("**按轉出商店類型**")
+            tst = statistics.get("transfer_store_type_stats", {})
+            if tst:
+                tst_data = []
+                for stype, data in sorted(tst.items(), key=lambda x: -x[1].get("qty", 0)):
+                    tst_data.append({"Type": stype, "Qty": data.get("qty", 0), "Count": data.get("count", 0)})
+                st.dataframe(pd.DataFrame(tst_data), use_container_width=True, hide_index=True)
+
+        col7, col8 = st.columns(2)
+
+        with col7:
+            st.markdown("**按接收商店類型**")
+            rst = statistics.get("receive_store_type_stats", {})
+            if rst:
+                rst_data = []
+                for stype, data in sorted(rst.items(), key=lambda x: -x[1].get("qty", 0)):
+                    rst_data.append({"Type": stype, "Qty": data.get("qty", 0), "Count": data.get("count", 0)})
+                st.dataframe(pd.DataFrame(rst_data), use_container_width=True, hide_index=True)
+
+        with col8:
+            st.markdown("**按轉出/接收 RP Type**")
+            trp = statistics.get("transfer_rp_type_stats", {})
+            rrp = statistics.get("receive_rp_type_stats", {})
+            rp_keys = sorted(set(list(trp.keys()) + list(rrp.keys())))
+            if rp_keys:
+                rp_data = []
+                for rp in rp_keys:
+                    td = trp.get(rp, {})
+                    rd = rrp.get(rp, {})
+                    rp_data.append({
+                        "RP Type": rp,
+                        "Transfer Qty": td.get("qty", 0),
+                        "Transfer Count": td.get("count", 0),
+                        "Receive Qty": rd.get("qty", 0),
+                        "Receive Count": rd.get("count", 0),
+                    })
+                st.dataframe(pd.DataFrame(rp_data), use_container_width=True, hide_index=True)
 
 
 def render_quality_report(passed: bool, errors: list):
