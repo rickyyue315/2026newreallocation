@@ -1,8 +1,0 @@
-feat: Notes 加入詳細分析 — 轉出/接收原因與計算依據
-
-- 轉出分析: 含庫存比較、安全庫存對比、店型分類、剩餘庫存說明
-- 接收分析: 含目標缺口、累計接收、銷量對比、緊急程度說明
-- 新增【調撥】摘要行: Article 轉出→接收 件數 (Remark)
-- 移除原有簡短 note，改為三段式分析
-
-Co-authored-by: CommandCodeBot <noreply@commandcode.ai>
