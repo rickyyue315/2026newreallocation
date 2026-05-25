@@ -132,11 +132,6 @@ def main():
                     st.session_state.statistics = statistics
 
                     progress.progress(90, "生成報告...")
-                    render_kpi_cards(statistics)
-                    render_results_table(recommendations)
-                    render_statistics(statistics)
-                    render_quality_report(passed, errors)
-                    render_download_button(recommendations, statistics)
 
                     progress.progress(100, "完成!")
                     st.success(f"處理完成! 共生成 {len(recommendations)} 條調貨建議")
