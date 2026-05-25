@@ -107,6 +107,7 @@ class TransferLogic:
                 matched_sites,
                 receive_site_limit,
                 f2_hd_transfer,
+                group_df,
             )
 
             all_recommendations.extend(group_recs)
@@ -126,6 +127,7 @@ class TransferLogic:
         matched_sites: set,
         receive_site_limit: Optional[int],
         f2_hd_transfer: bool = False,
+        group_df: pd.DataFrame = None,
     ) -> list:
         recommendations = []
         mode_def = self._mode_info_cache.get(mode)
@@ -162,6 +164,7 @@ class TransferLogic:
                 self, sources, dests, recommendations, mode, article,
                 transfer_sites, receive_sites, source_to_receive_sites,
                 received_qty_by_site, matched_sites, receive_site_limit,
+                group_df=group_df,
             )
         elif strategy_key == "f_mode":
             from strategies.f_mode import FModeStrategy
@@ -269,6 +272,8 @@ class TransferLogic:
 
                 if is_d_family:
                     if last_month > 0 or mtd > 0:
+                        if mode == "D2":
+                            continue
                         sources.append({
                             "article": article, "site": site, "om": om,
                             "rp_type": rp, "net_stock": net_stock,

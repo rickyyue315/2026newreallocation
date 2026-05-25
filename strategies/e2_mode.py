@@ -23,6 +23,7 @@ class E2ModeStrategy(BaseMatchStrategy):
         received_qty_by_site: dict,
         matched_sites: set,
         receive_site_limit=None,
+        group_df=None,
         **kwargs,
     ) -> list:
         from services.matching_engine import can_transfer, compute_transfer_qty, _mark_dest_saturated
@@ -140,22 +141,45 @@ class E2ModeStrategy(BaseMatchStrategy):
         if not c_fallback_dests:
             return recommendations
 
-        c_sources = [
-            s for s in sources
-            if s.get("source_type") != SOURCE_E_MANDATORY
-            and s.get("rp_type") == "RF"
-            and s.get("transferable_qty", 0) <= 0
-        ]
+        if group_df is None:
+            return recommendations
 
-        for s in c_sources:
-            site = s.get("site", "")
+        e_mode_source_sites = set(s.get("site", "") for s in e_sources)
+
+        from services.matching_engine import _clamp_target_qty, _adjust_d_family_remainder
+        from config import SOURCE_RF_SURPLUS_C_FALLBACK, SOURCE_RF_ENHANCED_C_FALLBACK
+
+        c_sources = []
+        max_protected = logic._compute_max_protected_sold(group_df, om_col=False) if hasattr(logic, '_compute_max_protected_sold') else float("inf")
+
+        for _, row in group_df.iterrows():
+            rp = str(row.get("RP Type", "")).strip()
+            if rp != "RF":
+                continue
+
+            site = str(row.get("Site", "")).strip()
+            if site in e_mode_source_sites:
+                continue
             if site in transfer_sites or site in receive_sites:
                 continue
-            net_stock = s.get("net_stock", 0)
-            total_avail = s.get("total_available", s.get("net_stock", 0))
-            safety = s.get("safety_stock", 0)
+
+            net_stock = int(row.get("SaSa Net Stock", 0))
+            if net_stock <= 0:
+                continue
+
+            pending = int(row.get("Pending Received", 0))
+            total_avail = net_stock + pending
+            safety = int(row.get("Safety Stock", 0))
+            last_month = int(row.get("Last Month Sold Qty", 0))
+            mtd = int(row.get("MTD Sold Qty", 0))
+            eff_sold = int(row.get("Effective Sold Qty", 0))
+            om = str(row.get("OM", "")).strip()
+            store_type = str(row.get("Type", "")).strip().upper() if "Type" in group_df.columns else ""
+            brand = str(row.get("Brand", "")).strip() if "Brand" in group_df.columns else ""
 
             if total_avail <= safety:
+                continue
+            if eff_sold >= max_protected:
                 continue
 
             base = total_avail - safety
@@ -166,17 +190,27 @@ class E2ModeStrategy(BaseMatchStrategy):
             if transferable <= 0:
                 continue
 
-            s["transferable_qty"] = transferable
-            s["source_type"] = SOURCE_SURPLUS_C_FALLBACK
+            remaining = net_stock - transferable
+            if remaining >= safety:
+                source_type = SOURCE_RF_SURPLUS_C_FALLBACK
+            else:
+                source_type = SOURCE_RF_ENHANCED_C_FALLBACK
 
-        from config import SOURCE_RF_SURPLUS, SOURCE_RF_ENHANCED
-        SOURCE_SURPLUS_C_FALLBACK = "RF過剩轉出(C模式回退)"
-        SOURCE_ENHANCED_C_FALLBACK = "RF加強轉出(C模式回退)"
-
-        c_sources = [
-            s for s in sources
-            if s.get("transferable_qty", 0) > 0 and s.get("source_type", "").endswith("(C模式回退)")
-        ]
+            c_sources.append({
+                "article": article, "site": site, "om": om,
+                "rp_type": rp, "net_stock": net_stock,
+                "pending_received": pending, "safety_stock": safety,
+                "last_month_sold": last_month, "mtd_sold": mtd,
+                "effective_sold_qty": eff_sold,
+                "transferable_qty": transferable,
+                "source_type": source_type,
+                "priority": 2,
+                "store_type": store_type, "brand": brand,
+                "product_desc": str(row.get("Article Description", "")).strip() if "Article Description" in group_df.columns else "",
+                "total_available": total_avail,
+                "original_stock": net_stock,
+                "total_transferred": 0,
+            })
 
         for source in c_sources:
             if source.get("transferable_qty", 0) <= 0:
@@ -204,16 +238,10 @@ class E2ModeStrategy(BaseMatchStrategy):
                 if transfer_qty <= 0:
                     continue
 
-                remaining = source.get("net_stock", 0) - source.get("total_transferred", 0) - transfer_qty
-                if remaining <= safety:
-                    source_type = SOURCE_ENHANCED_C_FALLBACK
-                else:
-                    source_type = SOURCE_SURPLUS_C_FALLBACK
-
                 rec = build_recommendation(source, dest, transfer_qty, mode, received_qty_by_site)
                 if rec:
-                    rec["Source Type"] = source_type
-                    rec["Remark"] = f"{source_type} -> {dest.get('dest_type', '')}"
+                    rec["Source Type"] = source.get("source_type", "")
+                    rec["Remark"] = f"{source.get('source_type', '')} -> {dest.get('dest_type', '')}"
                     recommendations.append(rec)
 
                 apply_transfer(source, dest, transfer_qty, received_qty_by_site)

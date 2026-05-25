@@ -36,16 +36,17 @@ class BSpecialStrategy(BaseMatchStrategy):
         is_cross_om = mode_def is not None and mode_def.cross_om_matching
         is_b3_family = mode_def is not None and "b3_family" in mode_def.families
 
-        rounds = [
-            (SOURCE_ND_PRIORITY, DEST_CRITICAL_PRIORITY, None),
-            (SOURCE_ND_PRIORITY, DEST_POTENTIAL_PRIORITY, None),
-            (SOURCE_RF_PRIORITY, DEST_CRITICAL_PRIORITY, SOURCE_RF_SURPLUS),
-            (SOURCE_RF_PRIORITY, DEST_POTENTIAL_PRIORITY, SOURCE_RF_SURPLUS),
-            (SOURCE_RF_PRIORITY, DEST_CRITICAL_PRIORITY, SOURCE_LOCAL_FULL),
-            (SOURCE_RF_PRIORITY, DEST_POTENTIAL_PRIORITY, SOURCE_LOCAL_FULL),
-            (SOURCE_RF_PRIORITY, DEST_CRITICAL_PRIORITY, SOURCE_RF_ENHANCED),
-            (SOURCE_RF_PRIORITY, DEST_POTENTIAL_PRIORITY, SOURCE_RF_ENHANCED),
+        source_types = [
+            (SOURCE_ND_PRIORITY, None),
+            (SOURCE_RF_PRIORITY, SOURCE_RF_SURPLUS),
+            (SOURCE_RF_PRIORITY, SOURCE_LOCAL_FULL),
+            (SOURCE_RF_PRIORITY, SOURCE_RF_ENHANCED),
         ]
+
+        rounds = []
+        for source_priority, source_type_filter in source_types:
+            for dest_priority in range(1, 6):
+                rounds.append((source_priority, dest_priority, source_type_filter))
 
         for source_priority, dest_priority, source_type_filter in rounds:
             priority_sources = [

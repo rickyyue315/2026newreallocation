@@ -138,18 +138,13 @@ class FModeStrategy(BaseMatchStrategy):
 
         hd_penalty = 0
         if f2_hd_transfer and source.get("site", "").upper().startswith("HD"):
-            non_hk = True
-            for d in dests:
-                if d.get("site", "").upper().startswith(("HA", "HB", "HC")):
-                    continue
-            hd_penalty = 10
+            has_hk_dest = any(d.get("site", "").upper().startswith(("HA", "HB", "HC")) for d in dests)
+            if has_hk_dest:
+                hd_penalty = 10
 
         windy_penalty = 0
-        if om == "Windy":
-            target_is_windy = any(
-                d.get("om", "") == "Windy" for d in dests
-            )
-            if not target_is_windy:
-                windy_penalty = 5
+        target_is_windy = any(d.get("om", "") == "Windy" for d in dests)
+        if om != "Windy" and target_is_windy:
+            windy_penalty = 5
 
         return (same_om, nd_bonus, hd_penalty, windy_penalty, -source.get("effective_sold_qty", 0))

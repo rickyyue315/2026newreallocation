@@ -84,5 +84,34 @@ class SimplifiedSKUStrategy(BaseMatchStrategy):
             if s.get("transferable_qty", 0) > 0 and s.get("site", "") not in transfer_sites:
                 s["is_d001_return"] = True
                 s["dest_priority_override"] = 99
+                
+                d001_dest = {
+                    "article": article,
+                    "site": "D001",
+                    "om": s.get("om", ""),
+                    "rp_type": "RF",
+                    "net_stock": 0,
+                    "pending_received": 0,
+                    "safety_stock": 0,
+                    "last_month_sold": 0,
+                    "mtd_sold": 0,
+                    "effective_sold_qty": 0,
+                    "needed_qty": s.get("transferable_qty", 0),
+                    "dest_type": "D001退回",
+                    "priority": 99,
+                    "store_type": "",
+                    "brand": s.get("brand", ""),
+                    "total_available": 0,
+                }
+                
+                transfer_qty = s.get("transferable_qty", 0)
+                rec = build_recommendation(s, d001_dest, transfer_qty, mode, received_qty_by_site)
+                if rec:
+                    rec["Remark"] = f"精簡SKU退回 -> D001退回"
+                    recommendations.append(rec)
+                
+                apply_transfer(s, d001_dest, transfer_qty, received_qty_by_site)
+                transfer_sites.add(s.get("site", ""))
+                receive_sites.add("D001")
 
         return recommendations
