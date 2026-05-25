@@ -104,9 +104,7 @@ class DataProcessor:
                 col_map[col] = "Article Long Text (60 Chars)"
             elif col_upper in ("LAST 2 MONTH SOLD QTY", "LAST_2_MONTH_SOLD_QTY"):
                 col_map[col] = "Last 2 Month Sold Qty"
-            elif col_upper in ("PRODUCT HIERARCHY", "PRODUCT_HIERARCHY"):
-                col_map[col] = "Product Hierarchy"
-            elif col_upper in ("BRAND", "品牌"):
+            elif col_upper in ("BRAND", "品牌", "PRODUCT HIERARCHY", "PRODUCT_HIERARCHY"):
                 col_map[col] = "Brand"
 
         df = df.rename(columns=col_map)
