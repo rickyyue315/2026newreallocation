@@ -138,6 +138,10 @@ class ExcelGenerator:
             worksheet.write(row, 1, val, num_fmt)
             row += 1
 
+        sub_header_fmt = workbook.add_format({
+            "bold": True, "border": 1, "bg_color": "#E8F0FE",
+        })
+
         row += 1
         sections = [
             ("By Article", "article_stats"),
@@ -154,21 +158,19 @@ class ExcelGenerator:
         for title, key in sections:
             stats = statistics.get(key, {})
             if stats:
-                row = self._write_stat_section(worksheet, row, title, stats, section_fmt, cell_fmt, num_fmt, key)
+                row = self._write_stat_section(worksheet, row, title, stats, section_fmt, cell_fmt, num_fmt, sub_header_fmt, key)
 
         worksheet.set_column(0, 0, 25)
         worksheet.set_column(1, 6, 15)
 
-    def _write_stat_section(self, worksheet, start_row, title, stats, section_fmt, cell_fmt, num_fmt, stats_key=""):
+    def _write_stat_section(self, worksheet, start_row, title, stats, section_fmt, cell_fmt, num_fmt, sub_header_fmt, stats_key=""):
         fields = _STAT_SECTION_FIELDS.get(stats_key, _STAT_SECTION_FIELDS["default"])
 
         worksheet.merge_range(start_row, 0, start_row, len(fields), title, section_fmt)
         start_row += 1
 
         for col_idx, (label, _) in enumerate(fields):
-            worksheet.write(start_row, col_idx, label, worksheet.workbook.add_format({
-                "bold": True, "border": 1, "bg_color": "#E8F0FE",
-            }))
+            worksheet.write(start_row, col_idx, label, sub_header_fmt)
         start_row += 1
 
         for key, data in sorted(stats.items()):
